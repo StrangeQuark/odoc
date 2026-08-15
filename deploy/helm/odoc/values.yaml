@@ -36,3 +36,7 @@ ingress:
   className: ""
   host: odoc.local
   tlsSecretName: ""
+  # nginx-ingress honors this; other controllers can override it with their
+  # own equivalent in this map.
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 26m

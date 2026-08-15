@@ -9,6 +9,8 @@ import org.springframework.data.repository.query.Param;
 public interface PageRepository extends JpaRepository<Page, UUID> {
     List<Page> findAllBySpaceIdOrderByUpdatedAtDesc(UUID spaceId);
 
+    boolean existsByContentContaining(String content);
+
     @Query(value = """
             select * from pages
             where search_document @@ websearch_to_tsquery('english', :query)

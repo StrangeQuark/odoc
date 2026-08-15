@@ -42,5 +42,5 @@ class MediaAssetController {
 
     @DeleteMapping("/api/v1/media/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    void delete(@PathVariable UUID id) { assets.delete(id); }
+    void delete(@PathVariable UUID id) { assets.deleteIfUnreferenced(id); }
 }

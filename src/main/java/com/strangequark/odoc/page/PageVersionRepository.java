@@ -5,7 +5,8 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-interface PageVersionRepository extends JpaRepository<PageVersion, UUID> {
+public interface PageVersionRepository extends JpaRepository<PageVersion, UUID> {
     List<PageVersion> findAllByPageIdOrderByVersionNumberDesc(UUID pageId);
     Optional<PageVersion> findTopByPageIdOrderByVersionNumberDesc(UUID pageId);
+    boolean existsByContentContaining(String content);
 }

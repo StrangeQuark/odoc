@@ -1,0 +1,9 @@
+target/
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+.idea/
+*.iml
+.DS_Store
+*.log
+.env
+deploy/local/state/

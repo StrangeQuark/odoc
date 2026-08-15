@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "odoc.name" . }}-frontend
+  labels:
+    {{- include "odoc.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "odoc.name" . }}-frontend
+  labels:
+    {{- include "odoc.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.frontend.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: frontend
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- include "odoc.labels" . | nindent 8 }}
+        app.kubernetes.io/component: frontend
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: frontend
+          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          ports: [{ name: http, containerPort: 8080 }]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+            runAsNonRoot: true
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          resources: {{- toYaml .Values.frontend.resources | nindent 12 }}
+          readinessProbe: { httpGet: { path: /healthz, port: http }, initialDelaySeconds: 2, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /healthz, port: http }, initialDelaySeconds: 10, periodSeconds: 10 }
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: {{ include "odoc.name" . }}-frontend-nginx
+        - name: tmp
+          emptyDir: {}

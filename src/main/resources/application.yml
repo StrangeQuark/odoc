@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: odoc
+  datasource:
+    url: ${ODOC_DATABASE_URL:jdbc:postgresql://localhost:5432/odoc}
+    username: ${ODOC_DATABASE_USERNAME:odoc}
+    password: ${ODOC_DATABASE_PASSWORD:odoc}
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
+
+server:
+  port: ${ODOC_SERVER_PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info

@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "odoc.name" . }}-frontend-nginx
+  labels:
+    {{- include "odoc.labels" . | nindent 4 }}
+data:
+  default.conf: |
+    server {
+      listen 8080;
+      server_name _;
+      root /usr/share/nginx/html;
+      index index.html;
+
+      location = /healthz {
+        add_header Content-Type text/plain;
+        return 200 'ok';
+      }
+
+      location /api/ {
+        proxy_pass http://{{ include "odoc.name" . }}-api:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+      }
+
+      location /actuator/ {
+        proxy_pass http://{{ include "odoc.name" . }}-api:8080;
+      }
+
+      location / {
+        try_files $uri $uri/ /index.html;
+      }
+    }

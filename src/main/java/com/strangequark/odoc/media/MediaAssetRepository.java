@@ -1,0 +1,6 @@
+package com.strangequark.odoc.media;
+
+import java.util.UUID;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+interface MediaAssetRepository extends JpaRepository<MediaAsset, UUID> {}

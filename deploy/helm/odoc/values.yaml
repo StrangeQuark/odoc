@@ -1,0 +1,38 @@
+api:
+  # The current MVP uses the local development account (developer/developer).
+  # Replace this profile when the production OIDC configuration is introduced.
+  springProfilesActive: local
+  image:
+    repository: odoc-api
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 2
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "1", memory: 1Gi }
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCpuUtilizationPercentage: 70
+  database:
+    url: jdbc:postgresql://postgres:5432/odoc
+    existingSecret: odoc-database
+    usernameKey: username
+    passwordKey: password
+
+frontend:
+  image:
+    repository: odoc-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 2
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 250m, memory: 128Mi }
+
+ingress:
+  enabled: false
+  className: ""
+  host: odoc.local
+  tlsSecretName: ""

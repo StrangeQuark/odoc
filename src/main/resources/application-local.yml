@@ -1,0 +1,5 @@
+spring:
+  security:
+    user:
+      name: ${ODOC_DEV_USERNAME:developer}
+      password: ${ODOC_DEV_PASSWORD:developer}

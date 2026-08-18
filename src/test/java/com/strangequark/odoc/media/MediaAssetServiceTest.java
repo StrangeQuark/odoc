@@ -10,7 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.strangequark.odoc.page.PageRepository;
 import com.strangequark.odoc.page.PageVersionRepository;
-import com.strangequark.odoc.space.SpaceRepository;
+import com.strangequark.odoc.workspace.WorkspaceAccessService;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -40,18 +40,17 @@ class MediaAssetServiceTest {
     };
 
     @Mock private MediaAssetRepository assets;
-    @Mock private SpaceRepository spaces;
+    @Mock private WorkspaceAccessService workspaceAccess;
     @Mock private PageRepository pages;
     @Mock private PageVersionRepository versions;
 
     @Test
     void storesAnAllowedImageAndReturnsItsAuthenticatedApiPath() {
         UUID spaceId = UUID.randomUUID();
-        MediaAssetService service = new MediaAssetService(assets, spaces, pages, versions,
+        MediaAssetService service = new MediaAssetService(assets, workspaceAccess, pages, versions,
                 Clock.fixed(Instant.parse("2026-08-14T00:00:00Z"), ZoneOffset.UTC));
         MockMultipartFile file = new MockMultipartFile("file", "architecture.png", "image/png",
                 new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, 1, 2, 3});
-        when(spaces.existsById(spaceId)).thenReturn(true);
         when(assets.save(any(MediaAsset.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         MediaAssetResponse response = service.upload(spaceId, file);
@@ -65,11 +64,10 @@ class MediaAssetServiceTest {
     @Test
     void storesAnAllowedVideoWhenTheFileSignatureMatches() {
         UUID spaceId = UUID.randomUUID();
-        MediaAssetService service = new MediaAssetService(assets, spaces, pages, versions,
+        MediaAssetService service = new MediaAssetService(assets, workspaceAccess, pages, versions,
                 Clock.fixed(Instant.parse("2026-08-14T00:00:00Z"), ZoneOffset.UTC));
         MockMultipartFile file = new MockMultipartFile("file", "walkthrough.webm", "video/webm",
                 WEBM_EBML_HEADER);
-        when(spaces.existsById(spaceId)).thenReturn(true);
         when(assets.save(any(MediaAsset.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         MediaAssetResponse response = service.upload(spaceId, file);
@@ -84,7 +82,6 @@ class MediaAssetServiceTest {
         UUID spaceId = UUID.randomUUID();
         MockMultipartFile file = new MockMultipartFile("file", "not-really-webm.webm", "video/webm",
                 new byte[] {(byte) 0x1a, 0x45, (byte) 0xdf, (byte) 0xa3, 1, 2, 3});
-        when(spaces.existsById(spaceId)).thenReturn(true);
 
         assertThatThrownBy(() -> service().upload(spaceId, file))
                 .isInstanceOf(ResponseStatusException.class)
@@ -97,7 +94,6 @@ class MediaAssetServiceTest {
         MediaAssetService service = service();
         MockMultipartFile file = new MockMultipartFile("file", "not-an-image.png", "image/png",
                 "not actually png".getBytes());
-        when(spaces.existsById(spaceId)).thenReturn(true);
 
         assertThatThrownBy(() -> service.upload(spaceId, file))
                 .isInstanceOf(ResponseStatusException.class)
@@ -110,7 +106,6 @@ class MediaAssetServiceTest {
         MediaAssetService service = service();
         MockMultipartFile file = new MockMultipartFile("file", "unknown", null,
                 new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47});
-        when(spaces.existsById(spaceId)).thenReturn(true);
 
         assertThatThrownBy(() -> service.upload(spaceId, file))
                 .isInstanceOf(ResponseStatusException.class)
@@ -120,7 +115,7 @@ class MediaAssetServiceTest {
     @Test
     void deletesAnUnusedUploadButPreservesMediaReferencedByPageHistory() {
         UUID unusedId = UUID.randomUUID();
-        when(assets.existsById(unusedId)).thenReturn(true);
+        when(assets.findById(unusedId)).thenReturn(java.util.Optional.of(asset(unusedId)));
         when(pages.existsByContentContaining("/api/v1/media/" + unusedId)).thenReturn(false);
         when(versions.existsByContentContaining("/api/v1/media/" + unusedId)).thenReturn(false);
         when(assets.deleteDirectlyById(unusedId)).thenReturn(1);
@@ -129,7 +124,7 @@ class MediaAssetServiceTest {
         verify(assets).deleteDirectlyById(unusedId);
 
         UUID referencedId = UUID.randomUUID();
-        when(assets.existsById(referencedId)).thenReturn(true);
+        when(assets.findById(referencedId)).thenReturn(java.util.Optional.of(asset(referencedId)));
         when(pages.existsByContentContaining("/api/v1/media/" + referencedId)).thenReturn(false);
         when(versions.existsByContentContaining("/api/v1/media/" + referencedId)).thenReturn(true);
 
@@ -159,7 +154,12 @@ class MediaAssetServiceTest {
     }
 
     private MediaAssetService service() {
-        return new MediaAssetService(assets, spaces, pages, versions, Clock.systemUTC());
+        return new MediaAssetService(assets, workspaceAccess, pages, versions, Clock.systemUTC());
+    }
+
+    private static MediaAsset asset(UUID id) {
+        return new MediaAsset(id, UUID.randomUUID(), "media.png", "image/png",
+                new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47}, Instant.EPOCH);
     }
 
 }

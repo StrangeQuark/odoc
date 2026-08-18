@@ -5,7 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.strangequark.odoc.space.SpaceRepository;
+import com.strangequark.odoc.workspace.WorkspaceAccessService;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -22,21 +22,23 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class PageServiceTest {
     @Mock private PageRepository pages;
     @Mock private PageVersionRepository versions;
-    @Mock private SpaceRepository spaces;
+    @Mock private WorkspaceAccessService workspaceAccess;
 
     @Test
     void delegatesTrimmedQueriesToThePostgresFullTextSearch() {
-        PageService service = new PageService(pages, versions, spaces);
-        when(pages.search("deployment guide")).thenReturn(List.of());
+        UUID workspaceId = UUID.randomUUID();
+        PageService service = new PageService(pages, versions, workspaceAccess);
+        when(workspaceAccess.workspaceIdsForCurrentUser()).thenReturn(List.of(workspaceId));
+        when(pages.searchInWorkspaces(List.of(workspaceId), "deployment guide")).thenReturn(List.of());
 
         assertThat(service.search("  deployment guide  ")).isEmpty();
 
-        verify(pages).search("deployment guide");
+        verify(pages).searchInWorkspaces(List.of(workspaceId), "deployment guide");
     }
 
     @Test
     void doesNotSearchForBlankQueries() {
-        PageService service = new PageService(pages, versions, spaces);
+        PageService service = new PageService(pages, versions, workspaceAccess);
 
         assertThat(service.search("  ")).isEmpty();
     }
@@ -44,9 +46,8 @@ class PageServiceTest {
     @Test
     void snapshotsEachSaveAsTheNextVersion() {
         UUID spaceId = UUID.randomUUID();
-        PageService service = new PageService(pages, versions, spaces,
+        PageService service = new PageService(pages, versions, workspaceAccess,
                 Clock.fixed(Instant.parse("2026-08-14T00:00:00Z"), ZoneOffset.UTC));
-        when(spaces.existsById(spaceId)).thenReturn(true);
         when(pages.save(any(Page.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(versions.findTopByPageIdOrderByVersionNumberDesc(any())).thenReturn(Optional.empty());
 
@@ -61,8 +62,7 @@ class PageServiceTest {
         UUID spaceId = UUID.randomUUID();
         UUID parentId = UUID.randomUUID();
         Page parent = new Page(parentId, spaceId, null, "Parent", "", Instant.EPOCH);
-        PageService service = new PageService(pages, versions, spaces);
-        when(spaces.existsById(spaceId)).thenReturn(true);
+        PageService service = new PageService(pages, versions, workspaceAccess);
         when(pages.findById(parentId)).thenReturn(Optional.of(parent));
         when(pages.save(any(Page.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(versions.findTopByPageIdOrderByVersionNumberDesc(any())).thenReturn(Optional.empty());

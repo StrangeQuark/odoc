@@ -1,0 +1,92 @@
+name: Backend CI
+
+on:
+  pull_request:
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Verify unit, architecture, and PostgreSQL contract tests
+        run: ./mvnw --batch-mode verify
+      - name: Verify Apache project metadata and third-party SBOM licenses
+        run: |
+          grep -Fqx '                                 Apache License' LICENSE
+          grep -Fq '<name>Apache License, Version 2.0</name>' pom.xml
+          test -s target/bom.json
+          jq -e 'all(.components[]; ((.licenses // []) | length) > 0)' target/bom.json >/dev/null
+      - name: Prove license and secret controls fail closed
+        run: ./scripts/verify-ci-negative-controls.sh
+      - name: Build the production image
+        run: docker build --tag odoc-api:ci .
+      - name: Scan the production image for high/critical dependencies
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
+        with:
+          image: odoc-api:ci
+          fail-build: true
+          severity-cutoff: high
+      - name: Retain SBOM on a failed or successful verification run
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: backend-sbom
+          path: target/bom.json
+          if-no-files-found: error
+          retention-days: 7
+
+  secret-scan:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Scan repository history for leaked secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  secure-compose-smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify the TLS proxy path and read-only application images
+        env:
+          ODOC_SECURE_SMOKE_PACKET_CAPTURE: "true"
+        run: ./deploy/local/scripts/verify-secure-stack.sh
+      - name: Validate the production-shaped Helm TLS contract
+        run: ./deploy/helm/odoc/scripts/verify-tls-render.sh
+
+  kind-tls-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out the matching frontend source for the cross-repository image smoke
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: StrangeQuark/odoc-react
+          path: odoc-react
+      - name: Install checksum-verified kind, kubectl, and Helm binaries
+        run: |
+          tool_dir="${RUNNER_TEMP}/odoc-kind-tools"
+          ./deploy/helm/odoc/scripts/install-kind-tooling.sh "${tool_dir}"
+          echo "${tool_dir}" >> "${GITHUB_PATH}"
+      - name: Run the disposable TLS Kind chart smoke
+        env:
+          ODOC_KIND_SMOKE_TLS: "true"
+          ODOC_KIND_SMOKE_FRONTEND_DIR: ${{ github.workspace }}/odoc-react
+        run: ./deploy/helm/odoc/scripts/kind-smoke.sh

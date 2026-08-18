@@ -2,7 +2,7 @@ package com.strangequark.odoc.media;
 
 import com.strangequark.odoc.page.PageRepository;
 import com.strangequark.odoc.page.PageVersionRepository;
-import com.strangequark.odoc.space.SpaceRepository;
+import com.strangequark.odoc.workspace.WorkspaceAccessService;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -26,21 +26,21 @@ class MediaAssetService {
     private static final Set<String> IMAGE_TYPES = Set.of("image/png", "image/jpeg", "image/gif", "image/webp", "image/avif");
     private static final Set<String> SUPPORTED_TYPES = Set.of("image/png", "image/jpeg", "image/gif", "image/webp", "image/avif", "video/mp4", "video/webm", "video/ogg");
     private final MediaAssetRepository assets;
-    private final SpaceRepository spaces;
+    private final WorkspaceAccessService workspaceAccess;
     private final PageRepository pages;
     private final PageVersionRepository versions;
     private final Clock clock;
 
     @Autowired
-    MediaAssetService(MediaAssetRepository assets, SpaceRepository spaces, PageRepository pages,
+    MediaAssetService(MediaAssetRepository assets, WorkspaceAccessService workspaceAccess, PageRepository pages,
             PageVersionRepository versions) {
-        this(assets, spaces, pages, versions, Clock.systemUTC());
+        this(assets, workspaceAccess, pages, versions, Clock.systemUTC());
     }
 
-    MediaAssetService(MediaAssetRepository assets, SpaceRepository spaces, PageRepository pages,
+    MediaAssetService(MediaAssetRepository assets, WorkspaceAccessService workspaceAccess, PageRepository pages,
             PageVersionRepository versions, Clock clock) {
         this.assets = assets;
-        this.spaces = spaces;
+        this.workspaceAccess = workspaceAccess;
         this.pages = pages;
         this.versions = versions;
         this.clock = clock;
@@ -48,7 +48,7 @@ class MediaAssetService {
 
     @Transactional
     MediaAssetResponse upload(UUID spaceId, MultipartFile file) {
-        if (!spaces.existsById(spaceId)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Space not found.");
+        workspaceAccess.requireAccessibleSpace(spaceId);
         String contentType = file.getContentType();
         if (contentType == null || contentType.isBlank() || !SUPPORTED_TYPES.contains(contentType)) {
             throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
@@ -57,7 +57,7 @@ class MediaAssetService {
         if (file.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a non-empty media file.");
         long limit = IMAGE_TYPES.contains(contentType) ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
         if (file.getSize() > limit) {
-            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE,
+            throw new ResponseStatusException(HttpStatus.CONTENT_TOO_LARGE,
                     (IMAGE_TYPES.contains(contentType) ? "Images" : "Videos") + " must be " + limit / 1024 / 1024 + " MB or smaller.");
         }
         try {
@@ -76,14 +76,15 @@ class MediaAssetService {
 
     @Transactional(readOnly = true)
     MediaAsset get(UUID id) {
-        return assets.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Media not found."));
+        MediaAsset asset = assets.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Media not found."));
+        workspaceAccess.requireAccessibleSpace(asset.spaceId());
+        return asset;
     }
 
     @Transactional
     boolean deleteIfUnreferenced(UUID id) {
-        if (!assets.existsById(id)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Media not found.");
-        }
+        get(id);
         if (isReferenced(id)) return false;
         return assets.deleteDirectlyById(id) > 0;
     }

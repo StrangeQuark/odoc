@@ -1,7 +1,7 @@
 # Odoc capability and release matrix
 
-**Status:** proposed foundation policy; project-owner approval is required before
-`P0-001` is complete.
+**Status:** accepted MVP-development scope; public-release operations remain separately
+gated.
 
 **Roadmap package:** `P0-001`
 
@@ -84,8 +84,9 @@ be amended together before implementation:
   search providers, additional API-documentation languages, broader attachment preview
   providers, and multi-region guidance remain explicitly deferred until a newly assigned
   implementation package exists and the later claim passes `P5-527`;
-- external OIDC is the production identity boundary through M4; SAML broker, SCIM, and
-  directory lifecycle are deferred to the M5 enterprise track through `P5-530`;
+- invite-only email/password accounts are the MVP identity boundary. OIDC/OAuth/SSO are
+  optional provider-linking features; SAML broker, SCIM, and directory lifecycle are
+  deferred to the M5 enterprise track through `P5-530`;
 - native portable restore, Markdown/HTML interchange, and the Confluence importer are
   public-beta capabilities delivered by `P5-506`–`P5-508` before the M4 candidate;
   native restore remains mandatory for 1.0.
@@ -101,7 +102,7 @@ amended before `P0-001` is approved.
 | Capability family | Earliest commitment | Owning packages and required gate |
 |---|---|---|
 | Workspaces, members, groups, and roles | MVP | `P1-100`–`P1-106`, `P1-113` |
-| Authentication and sessions | MVP, external OIDC | `P1-101`, `P1-102`, `P1-108`, `P1-113`; native credentials remain `P5-531` decision-only until approved |
+| Authentication and sessions | MVP, invite-only email/password plus secure sessions | `P1-101`, `P1-102`, `P1-108`, `P1-113`; optional OIDC/OAuth linking is in the same identity model and MFA/passkeys remain `P5-531` hardening work |
 | Enterprise identity and directory provisioning | M5 enterprise track; explicitly deferred from M4 | `P5-530`; SAML/SCIM claims require its contract, migration, security, and QA evidence |
 | Central authorization and tenant isolation | MVP | `P1-104`, `P1-113`, `QA-003`, `QA-008` |
 | Audit and administrative visibility | MVP baseline; beta UI | `P1-107`, `P3-312`, `P5-520`, `QA-003` |
@@ -166,7 +167,7 @@ because authorized Odoc services can request keys and process plaintext transien
 - Arbitrary JavaScript plugins, same-origin page scripts, or server classpath plugins.
 - Native mobile applications, full offline-first editing, or unapproved CRDT work.
 - OpenSearch/Elasticsearch before measured PostgreSQL search limits require it.
-- Built-in production passwords, recovery, or MFA before `P5-531` is approved.
+- MFA/passkeys or a weaker password/recovery flow that bypasses the `P1-101` identity contract before `P5-531` is approved.
 - Claiming every Confluence macro, import shape, or enterprise feature is compatible.
 - Calling managed server-side encryption “end-to-end encryption.”
 

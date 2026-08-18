@@ -4,6 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -13,7 +14,10 @@ class Space {
     @Id
     private UUID id;
 
-    @Column(name = "space_key", nullable = false, unique = true, length = 64)
+    @Column(name = "workspace_id", nullable = false)
+    private UUID workspaceId;
+
+    @Column(name = "space_key", nullable = false, length = 64)
     private String key;
 
     @Column(nullable = false, length = 160)
@@ -28,11 +32,16 @@ class Space {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Version
+    @Column(nullable = false)
+    private long revision;
+
     protected Space() {
     }
 
-    Space(UUID id, String key, String name, String description, Instant createdAt) {
+    Space(UUID id, UUID workspaceId, String key, String name, String description, Instant createdAt) {
         this.id = id;
+        this.workspaceId = workspaceId;
         this.key = key;
         this.name = name;
         this.description = description;
@@ -41,6 +50,7 @@ class Space {
     }
 
     UUID getId() { return id; }
+    UUID getWorkspaceId() { return workspaceId; }
     String getKey() { return key; }
     String getName() { return name; }
     String getDescription() { return description; }

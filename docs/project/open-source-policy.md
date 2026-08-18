@@ -1,6 +1,6 @@
 # Open-source and dependency policy
 
-**Status:** proposed project-owner decision
+**Status:** owner-approved for MVP development on 2026-08-15
 
 **Roadmap package:** `P0-001`
 
@@ -12,30 +12,27 @@ license or linking model enters the product.
 
 ## Project license decision
 
-The proposed license for Odoc source, tests, build/deployment definitions, and
-project documentation is **GNU Affero General Public License v3.0 or later**, using
-the SPDX expression `AGPL-3.0-or-later`.
+The license for Odoc source, tests, build/deployment definitions, and project
+documentation is **Apache License 2.0**, using the SPDX expression `Apache-2.0`.
 
 Rationale:
 
-- It is an [OSI-approved license](https://opensource.org/license/agpl-3-0) and the
-  exact `AGPL-3.0-or-later` expression is listed by
-  [SPDX](https://spdx.org/licenses/AGPL-3.0-or-later.html).
-- Odoc is primarily network-server software. Network copyleft helps ensure that
-  users of a materially modified hosted Odoc can obtain corresponding source.
-- It preserves the ability to use, study, modify, self-host, and redistribute the
-  open-source core without requiring a commercial extension.
+- It is an [OSI-approved license](https://opensource.org/license/apache-2-0) with a
+  clear [SPDX expression](https://spdx.org/licenses/Apache-2.0.html) and an explicit
+  patent grant.
+- It permits broad self-hosting, commercial use, modification, and redistribution
+  without making an external service operator's source-release choice a condition.
+- It remains compatible with the project's requirement that core functionality not
+  depend on proprietary or paid-only add-ons.
 
 Consequences:
 
-- Distributed and network-served modified versions must satisfy the applicable
-  AGPL source-availability and notice obligations. Odoc must retain a clear Source
-  link in remote-user interfaces once an application UI exists.
-- Contributors must have the right to submit their work under
-  `AGPL-3.0-or-later`. No contribution can add a hidden proprietary exception.
-- Some otherwise open-source dependencies are not license-compatible with the
-  combined work. Review actual use, linking, distribution, and asset terms rather
-  than relying only on a package registry label.
+- Distributions must preserve Apache-required notices and license text. Modified files
+  must carry prominent change notices where the Apache license requires them.
+- Contributors must have the right to submit their work under `Apache-2.0`. No
+  contribution can add a hidden proprietary restriction to required core code.
+- Dependency and asset terms still require review; permissive project licensing does
+  not make incompatible or source-unavailable dependencies acceptable.
 - This policy does not grant rights to the Odoc name or logos; see
   [TRADEMARKS.md](../../TRADEMARKS.md).
 
@@ -43,9 +40,9 @@ Alternatives considered:
 
 | Alternative | Benefit | Reason not selected as the initial recommendation |
 |---|---|---|
-| Apache-2.0 | Permissive, explicit patent grant, broad commercial adoption | Hosted proprietary forks need not publish modifications, weakening the open-hosted collaboration objective |
-| MPL-2.0 | File-level copyleft and commercial friendliness | Network use does not by itself ensure users receive modified server source |
-| AGPL-3.0-only | Fixed legal text | `-or-later` gives every recipient the AGPL §14 option to use a later FSF version; project review governs only how future Odoc distributions and metadata present that already-granted option |
+| AGPL-3.0-or-later | Network copyleft | Not selected: the owner chose a permissive license for broad adoption and self-hosting |
+| MPL-2.0 | File-level copyleft and commercial friendliness | Not selected: Apache's simpler permissive model and patent grant fit the current project direction |
+| AGPL-3.0-only | Fixed legal text | Not selected with the AGPL family |
 | Dual AGPL/commercial | Can fund a vendor and accommodate proprietary embedding | Requires copyright ownership/CLA and commercial governance not approved for the community project |
 
 No dual-license or Contributor License Agreement exists. The project uses a
@@ -56,11 +53,10 @@ party that authorized the submission.
 
 ## Required notices
 
-- A root `LICENSE` must contain an unmodified AGPL v3 license text before `P0-001`
-  is marked complete.
+- Each repository root contains the unmodified Apache License 2.0 text.
 - Build metadata, package manifests, source headers where appropriate, container
-  labels, release archives, and SBOMs use `AGPL-3.0-or-later` consistently.
-- Third-party notices and source-offer obligations ship with every release artifact.
+  labels, release archives, and SBOMs use `Apache-2.0` consistently.
+- Third-party notices ship with every release artifact.
 - Vendored, generated, fixture, font, image, icon, and dataset material carries its
   own provenance and license; the project license does not erase upstream terms.
 - Every released binary, image, chart, package, and generated asset maps to an exact

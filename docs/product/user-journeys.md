@@ -12,7 +12,7 @@ authorized, accessible, recoverable, and diagnosable across retries and pod chan
 
 ## Workspace owner establishes a private knowledge base
 
-1. Sign in through the configured external OIDC provider.
+1. Accept an invite, verify email, and sign in with an email/password account; optionally use a configured, linked OIDC provider.
 2. Create a managed-encryption workspace after reviewing recovery consequences and
    become its first owner atomically. A zero-knowledge choice is not displayed until
    the separate E2EE implementation and claim gates pass.

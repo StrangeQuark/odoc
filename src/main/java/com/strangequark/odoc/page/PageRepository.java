@@ -12,10 +12,12 @@ public interface PageRepository extends JpaRepository<Page, UUID> {
     boolean existsByContentContaining(String content);
 
     @Query(value = """
-            select * from pages
-            where search_document @@ websearch_to_tsquery('english', :query)
-            order by ts_rank_cd(search_document, websearch_to_tsquery('english', :query)) desc, updated_at desc
+            select pages.* from pages
+            join spaces on spaces.id = pages.space_id
+            where spaces.workspace_id in (:workspaceIds)
+              and search_document @@ websearch_to_tsquery('english', :query)
+            order by ts_rank_cd(search_document, websearch_to_tsquery('english', :query)) desc, pages.updated_at desc
             limit 25
             """, nativeQuery = true)
-    List<Page> search(@Param("query") String query);
+    List<Page> searchInWorkspaces(@Param("workspaceIds") List<UUID> workspaceIds, @Param("query") String query);
 }

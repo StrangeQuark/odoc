@@ -161,8 +161,8 @@ comparison. Never collect content, query text, document titles, private URLs, or
 | Risk | Early control and decision gate |
 |---|---|
 | “Confluence parity” becomes unbounded | Capability matrix, explicit non-goals, package IDs, and `P5-527` claim audit |
-| Project license discourages an intended contributor/deployer group | Owner approval of `AGPL-3.0-or-later`, compatibility automation, and review before public release |
-| A conflicted working name creates user confusion, legal exposure, or an expensive late rename | Keep Odoc a temporary repository locator; select only a candidate at `P0-001`; complete expanded ecosystem/common-law/trademark screening and appropriate qualified review before `P0-002` freezes branding; repeat review before release and material expansion |
+| Project license discourages an intended contributor/deployer group | Apache-2.0 notice/SBOM automation, dependency review, and release review before public distribution |
+| A conflicted working name creates user confusion, legal exposure, or an expensive late rename | Keep the documented Odoc collision risk visible, make no clearance claim, and complete qualified review before public 1.0, trademark/domain activity, or material commercial expansion |
 | Editor choice needs proprietary extensions or traps data | `P0-009` OSS comparison, Odoc-owned versioned schema, deterministic migrations/export |
 | Tenancy is retrofitted after features | `P1-104`/`P1-113` before content breadth and `QA-008` for every resource path |
 | Rich text, README, JavaDoc, macros, or highlights execute content | Structured models, allowlisted renderers, hostile corpus, sanitizer defense, CSP |

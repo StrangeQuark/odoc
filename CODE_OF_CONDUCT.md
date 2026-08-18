@@ -1,7 +1,7 @@
 # Odoc Code of Conduct
 
-**Status:** proposed foundation policy; project-owner approval and operational private
-reporting/appeal contacts are required before `P0-001` is complete.
+**Status:** proposed public-release policy; operational private reporting/appeal contacts
+are required before the first public release.
 
 ## Our commitment
 
@@ -49,7 +49,7 @@ Do not report conduct incidents in a public issue. Before this policy is adopted
 outside contributions are solicited, maintainers must publish a monitored private
 conduct contact and a different independent appeal contact, document who can access
 each, and test both routes. Those contacts are currently pending; this policy is not
-operational and `P0-001` cannot complete until they are supplied. For an immediate
+operational before a public release. For an immediate
 GitHub-hosted safety issue in the meantime, use GitHub's own block/report-abuse controls,
 but understand that this does not deliver a report to the Odoc project.
 

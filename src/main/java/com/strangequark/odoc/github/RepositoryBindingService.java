@@ -1,6 +1,6 @@
 package com.strangequark.odoc.github;
 
-import com.strangequark.odoc.space.SpaceRepository;
+import com.strangequark.odoc.workspace.WorkspaceAccessService;
 import java.net.URI;
 import java.time.Clock;
 import java.util.List;
@@ -14,18 +14,20 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 class RepositoryBindingService {
     private final RepositoryBindingRepository bindings;
-    private final SpaceRepository spaces;
+    private final WorkspaceAccessService workspaceAccess;
     private final GithubRepositoryClient github;
     private final Clock clock;
 
     @Autowired
-    RepositoryBindingService(RepositoryBindingRepository bindings, SpaceRepository spaces, GithubRepositoryClient github) {
-        this(bindings, spaces, github, Clock.systemUTC());
+    RepositoryBindingService(
+            RepositoryBindingRepository bindings, WorkspaceAccessService workspaceAccess, GithubRepositoryClient github) {
+        this(bindings, workspaceAccess, github, Clock.systemUTC());
     }
 
-    RepositoryBindingService(RepositoryBindingRepository bindings, SpaceRepository spaces, GithubRepositoryClient github, Clock clock) {
+    RepositoryBindingService(
+            RepositoryBindingRepository bindings, WorkspaceAccessService workspaceAccess, GithubRepositoryClient github, Clock clock) {
         this.bindings = bindings;
-        this.spaces = spaces;
+        this.workspaceAccess = workspaceAccess;
         this.github = github;
         this.clock = clock;
     }
@@ -50,7 +52,7 @@ class RepositoryBindingService {
     }
 
     private void requireSpace(UUID spaceId) {
-        if (!spaces.existsById(spaceId)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Space not found.");
+        workspaceAccess.requireAccessibleSpace(spaceId);
     }
 
     private record GithubCoordinates(String owner, String repository) {

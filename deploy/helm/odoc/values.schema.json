@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Odoc Helm values",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["api", "worker", "frontend", "ingress"],
+  "properties": {
+    "api": { "$ref": "#/$defs/application" },
+    "worker": { "$ref": "#/$defs/application" },
+    "frontend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime", "image", "replicaCount", "resources"],
+      "properties": {
+        "runtime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["apiBasePath", "release"],
+          "properties": {
+            "apiBasePath": { "type": "string", "pattern": "^/" },
+            "release": { "type": "string", "minLength": 1 }
+          }
+        },
+        "image": { "$ref": "#/$defs/image" },
+        "replicaCount": { "type": "integer", "minimum": 1 },
+        "resources": { "$ref": "#/$defs/resources" },
+        "upstreamTls": { "$ref": "#/$defs/trustBundle" }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "className", "host", "tlsSecretName", "annotations"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "host": { "type": "string", "minLength": 1 },
+        "tlsSecretName": { "type": "string" },
+        "annotations": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "api": {
+            "properties": {
+              "serverTls": {
+                "properties": { "enabled": { "const": true } }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "frontend": {
+            "properties": {
+              "upstreamTls": {
+                "properties": { "enabled": { "const": true } }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "frontend": {
+            "properties": {
+              "upstreamTls": {
+                "properties": { "enabled": { "const": true } }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "api": {
+            "properties": {
+              "serverTls": {
+                "properties": { "enabled": { "const": true } }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "application": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["springProfilesActive", "image", "replicaCount", "resources", "database"],
+      "properties": {
+        "springProfilesActive": { "type": "string", "minLength": 1 },
+        "image": { "$ref": "#/$defs/image" },
+        "replicaCount": { "type": "integer", "minimum": 1 },
+        "resources": { "$ref": "#/$defs/resources" },
+        "database": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["url", "existingSecret", "usernameKey", "passwordKey"],
+          "properties": {
+            "url": { "type": "string", "pattern": "^jdbc:postgresql://" },
+            "existingSecret": { "type": "string", "minLength": 1 },
+            "usernameKey": { "type": "string", "minLength": 1 },
+            "passwordKey": { "type": "string", "minLength": 1 }
+          }
+        },
+        "serverTls": { "$ref": "#/$defs/serverTls" },
+        "trustBundleConfigMap": { "type": "string" },
+        "trustBundleKey": { "type": "string", "minLength": 1 },
+        "autoscaling": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "minReplicas", "maxReplicas", "targetCpuUtilizationPercentage"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "minReplicas": { "type": "integer", "minimum": 1 },
+            "maxReplicas": { "type": "integer", "minimum": 1 },
+            "targetCpuUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 }
+          }
+        }
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "tag", "pullPolicy"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string", "minLength": 1 },
+        "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requests", "limits"],
+      "properties": {
+        "requests": { "type": "object", "additionalProperties": { "type": ["string", "number"] } },
+        "limits": { "type": "object", "additionalProperties": { "type": ["string", "number"] } }
+      }
+    },
+    "trustBundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "trustBundleConfigMap", "trustBundleKey"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "trustBundleConfigMap": { "type": "string" },
+        "trustBundleKey": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "enabled": { "const": true } } },
+          "then": {
+            "properties": {
+              "trustBundleConfigMap": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      ]
+    },
+    "serverTls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "existingSecret", "keyStoreKey", "keyStorePasswordKey", "trustBundleConfigMap", "trustBundleKey"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "existingSecret": { "type": "string" },
+        "keyStoreKey": { "type": "string", "minLength": 1 },
+        "keyStorePasswordKey": { "type": "string", "minLength": 1 },
+        "trustBundleConfigMap": { "type": "string" },
+        "trustBundleKey": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "enabled": { "const": true } } },
+          "then": {
+            "properties": {
+              "existingSecret": { "type": "string", "minLength": 1 },
+              "trustBundleConfigMap": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

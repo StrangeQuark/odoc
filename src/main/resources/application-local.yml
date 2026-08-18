@@ -1,5 +1,27 @@
 spring:
+  mail:
+    host: ${ODOC_MAIL_HOST:localhost}
+    port: ${ODOC_MAIL_PORT:1025}
+    properties:
+      mail.smtp.auth: false
+      mail.smtp.starttls.enable: false
+  datasource:
+    url: ${ODOC_DATABASE_URL:jdbc:postgresql://localhost:5432/odoc}
+    username: ${ODOC_DATABASE_USERNAME:odoc}
+    password: ${ODOC_DATABASE_PASSWORD:odoc}
   security:
     user:
       name: ${ODOC_DEV_USERNAME:developer}
-      password: ${ODOC_DEV_PASSWORD:developer}
+      # The temporary Basic account is retained only while the UI migrates to cookie sessions.
+      # Prefixing it makes Spring Security's configured Argon2 encoder unambiguous.
+      password: "{noop}${ODOC_DEV_PASSWORD:developer}"
+
+odoc:
+  encryption:
+    managed:
+      enabled: ${ODOC_MANAGED_ENCRYPTION_ENABLED:true}
+      # Public, development-only test KEK. Production must supply an external KMS adapter.
+      wrapping-key-base64: ${ODOC_MANAGED_ENCRYPTION_WRAPPING_KEY_BASE64:AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA}
+  auth:
+    local-registration-enabled: ${ODOC_AUTH_LOCAL_REGISTRATION_ENABLED:true}
+    secure-cookies: ${ODOC_AUTH_SECURE_COOKIES:false}

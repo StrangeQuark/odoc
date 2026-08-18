@@ -1,0 +1,89 @@
+# Opt-in development TLS overlay. Generate state first with scripts/bootstrap-pki.sh.
+# Use with compose.yml and compose.app.yml; it deliberately rejects plaintext PostgreSQL.
+services:
+  postgres:
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        # Keep pre-init certificate material out of PGDATA: initdb requires that directory empty.
+        install -d -m 0700 -o postgres -g postgres /run/odoc-tls
+        cp /certs/postgres.crt /run/odoc-tls/postgres.crt
+        cp /certs/postgres.key /run/odoc-tls/postgres.key
+        cp /certs/ca.crt /run/odoc-tls/ca.crt
+        cp /certs/pg_hba.conf /run/odoc-tls/pg_hba.conf
+        chown postgres:postgres /run/odoc-tls/*
+        chmod 0600 /run/odoc-tls/postgres.key
+        exec /usr/local/bin/docker-entrypoint.sh postgres \
+          -c ssl=on \
+          -c ssl_cert_file=/run/odoc-tls/postgres.crt \
+          -c ssl_key_file=/run/odoc-tls/postgres.key \
+          -c ssl_ca_file=/run/odoc-tls/ca.crt \
+          -c hba_file=/run/odoc-tls/pg_hba.conf
+    volumes:
+      - ./state/pki/postgres:/certs:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          PGPASSWORD="$$POSTGRES_PASSWORD" PGSSLMODE=verify-full
+          PGSSLROOTCERT=/run/odoc-tls/ca.crt
+          psql -h localhost -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -c 'SELECT 1' >/dev/null
+
+  minio:
+    command: server /data --console-address :9001 --certs-dir /certs
+    environment:
+      SSL_CERT_FILE: /certs/CAs/ca.crt
+    volumes:
+      - ./state/pki/minio:/certs:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mc alias set local https://localhost:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null
+          && mc ready local >/dev/null
+
+  minio-init:
+    environment:
+      SSL_CERT_FILE: /tls/ca.crt
+    entrypoint: >-
+      /bin/sh -ec 'mc alias set local https://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD";
+      mc mb --ignore-existing "local/$$ODOC_MEDIA_BUCKET"'
+    volumes:
+      - ./state/pki/client:/tls:ro
+
+  mailpit:
+    command:
+      - --ui-tls-cert=/certs/mailpit.crt
+      - --ui-tls-key=/certs/mailpit.key
+      - --smtp-tls-cert=/certs/mailpit.crt
+      - --smtp-tls-key=/certs/mailpit.key
+      - --smtp-require-starttls
+    volumes:
+      - ./state/pki/mailpit:/certs:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://localhost:8025/readyz >/dev/null"]
+
+  api:
+    environment:
+      SPRING_PROFILES_ACTIVE: local,tls
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${ODOC_DATABASE_NAME:-odoc}?sslmode=verify-full&sslrootcert=/tls/ca.crt
+      ODOC_SERVER_TLS_KEY_STORE: /tls-server/api.p12
+      ODOC_SERVER_TLS_KEY_STORE_PASSWORD: odoc-local-only
+    volumes:
+      - ./state/pki/client:/tls:ro
+      - ./state/pki/api:/tls-server:ro
+
+  worker:
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${ODOC_DATABASE_NAME:-odoc}?sslmode=verify-full&sslrootcert=/tls/ca.crt
+    volumes:
+      - ./state/pki/client:/tls:ro
+
+  frontend:
+    ports: !override
+      - "${ODOC_HTTPS_FRONTEND_PORT:-8443}:8443"
+    volumes:
+      - ../../../odoc-react/deploy/nginx.tls.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./state/pki/frontend:/etc/nginx/certs:ro
+      - ./state/pki/client:/etc/nginx/ca:ro

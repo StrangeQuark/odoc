@@ -1,0 +1,6 @@
+# Opt-in P0 local scale proof. It removes the host API port so Docker Compose
+# can start two internal replicas behind the frontend proxy. The normal stack
+# remains one API with its convenient host port.
+services:
+  api:
+    ports: !override []

@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "odoc.name" . }}-worker
+  labels:
+    {{- include "odoc.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: worker
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- include "odoc.labels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: worker
+          image: "{{ .Values.worker.image.repository }}:{{ .Values.worker.image.tag }}"
+          imagePullPolicy: {{ .Values.worker.image.pullPolicy }}
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: {{ .Values.worker.springProfilesActive | quote }}
+            - name: SPRING_DATASOURCE_URL
+              value: {{ .Values.worker.database.url | quote }}
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom: { secretKeyRef: { name: {{ .Values.worker.database.existingSecret }}, key: {{ .Values.worker.database.usernameKey }} } }
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ .Values.worker.database.existingSecret }}, key: {{ .Values.worker.database.passwordKey }} } }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.worker.trustBundleConfigMap }}
+            - name: trust-bundle
+              mountPath: /tls
+              readOnly: true
+            {{- end }}
+          resources: {{- toYaml .Values.worker.resources | nindent 12 }}
+          startupProbe:
+            exec: { command: ["sh", "-c", "kill -0 1"] }
+            failureThreshold: 30
+            periodSeconds: 2
+          livenessProbe:
+            exec: { command: ["sh", "-c", "kill -0 1"] }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      volumes:
+        - name: tmp
+          emptyDir: { medium: Memory }
+        {{- if .Values.worker.trustBundleConfigMap }}
+        - name: trust-bundle
+          configMap:
+            name: {{ .Values.worker.trustBundleConfigMap }}
+        {{- end }}

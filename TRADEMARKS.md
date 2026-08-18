@@ -1,14 +1,14 @@
 # Odoc working-name and official-channel policy
 
-**Status:** proposed foundation decision; project-owner approval is required before
-`P0-001` is complete.
+**Status:** owner-approved working-name policy for MVP development; public-launch
+review remains required.
 
-The name **Odoc is a temporary repository locator only and is not recommended as the
-public product name**. The project's
+The name **Odoc is the current project and repository name**. The project's
 [collision and replacement-name screen](docs/project/name-collision-research.md) found an exact,
 active OCaml developer-documentation tool plus other package/software/name conflicts.
-A replacement candidate must be selected, expanded screening completed, and adoption
-separately approved before `P0-002` fixes package/artifact/runtime names.
+The owner has accepted that risk for private/local MVP development, not as legal
+clearance or a claim of exclusive rights. A qualified review is required before a public
+1.0 release, trademark filing, domain acquisition, or material commercial expansion.
 The project has not completed legal name/trademark clearance, identified a trademark
 rights holder, adopted an official logo, or represented the name as registered. This
 file is a project-identity guideline, not a claim of exclusive trademark rights or a
@@ -60,15 +60,14 @@ the operational private channel required by [SECURITY.md](SECURITY.md); platform
 may also be reported to the hosting or registry provider. Ordinary identity questions
 need a public contact before the first release.
 
-## Replacement-name decision before architecture bootstrap
+## Name review before public launch
 
-Before `P0-002`, the project owner must select a replacement candidate and authorize
-and complete an appropriate availability review across relevant software/project/package/
-domain, company, common-law, and trademark sources. The review records its jurisdictions,
-classes, sources, limitations, and who, if anyone, can grant rights in a future logo.
-Candidate selection is not clearance or adoption. Only after that review and a separate
-recorded owner decision may the project adopt the replacement for package namespaces,
-artifact/image/chart names, UI branding, or a coordinated repository rename.
+Before a public 1.0 release, trademark filing, domain acquisition, or material commercial
+expansion, the project owner must obtain an appropriate availability review across
+relevant software/project/package/domain, company, common-law, and trademark sources.
+The review records jurisdictions, classes, sources, limitations, and who, if anyone,
+can grant rights in a future logo. A decision to retain or replace Odoc after that review
+is separate from the review itself.
 
 Repeat review before the first tagged release and 1.0, and when entering a materially
 new jurisdiction or commercial use. This document provides no assurance that any name

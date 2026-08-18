@@ -1,16 +1,22 @@
 spring:
   application:
     name: odoc
+  lifecycle:
+    timeout-per-shutdown-phase: ${ODOC_SHUTDOWN_TIMEOUT:20s}
   datasource:
-    url: ${ODOC_DATABASE_URL:jdbc:postgresql://localhost:5432/odoc}
-    username: ${ODOC_DATABASE_USERNAME:odoc}
-    password: ${ODOC_DATABASE_PASSWORD:odoc}
+    url: ${ODOC_DATABASE_URL}
+    username: ${ODOC_DATABASE_USERNAME}
+    password: ${ODOC_DATABASE_PASSWORD}
   flyway:
     enabled: true
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
   servlet:
     multipart:
       max-file-size: 25MB
@@ -21,6 +27,30 @@ spring:
 server:
   port: ${ODOC_SERVER_PORT:8080}
   shutdown: graceful
+
+odoc:
+  runtime:
+    mode: ${ODOC_RUNTIME_MODE:API}
+  database:
+    maximum-pool-size: ${ODOC_DATABASE_MAX_POOL_SIZE:10}
+    minimum-idle: ${ODOC_DATABASE_MIN_IDLE:2}
+    connection-timeout: ${ODOC_DATABASE_CONNECTION_TIMEOUT:5s}
+    validation-timeout: ${ODOC_DATABASE_VALIDATION_TIMEOUT:3s}
+    max-lifetime: ${ODOC_DATABASE_MAX_LIFETIME:25m}
+    statement-timeout: ${ODOC_DATABASE_STATEMENT_TIMEOUT:15s}
+    lock-timeout: ${ODOC_DATABASE_LOCK_TIMEOUT:5s}
+    idle-in-transaction-timeout: ${ODOC_DATABASE_IDLE_IN_TRANSACTION_TIMEOUT:30s}
+  encryption:
+    managed:
+      enabled: ${ODOC_MANAGED_ENCRYPTION_ENABLED:false}
+      wrapping-key-base64: ${ODOC_MANAGED_ENCRYPTION_WRAPPING_KEY_BASE64:}
+  auth:
+    local-registration-enabled: ${ODOC_AUTH_LOCAL_REGISTRATION_ENABLED:false}
+    instance-scope-id: ${ODOC_AUTH_INSTANCE_SCOPE_ID:00000000-0000-0000-0000-000000000001}
+    session-ttl: ${ODOC_AUTH_SESSION_TTL:12h}
+    secure-cookies: ${ODOC_AUTH_SECURE_COOKIES:true}
+  github:
+    api-base-url: ${ODOC_GITHUB_API_BASE_URL:https://api.github.com/repos}
 
 management:
   endpoint:

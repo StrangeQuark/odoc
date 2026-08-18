@@ -41,28 +41,66 @@ spec:
           ports: [{ name: http, containerPort: 8080 }]
           env:
             - name: SPRING_PROFILES_ACTIVE
-              value: {{ .Values.api.springProfilesActive | quote }}
+              value: {{ if .Values.api.serverTls.enabled }}{{ printf "%s,tls" .Values.api.springProfilesActive | quote }}{{ else }}{{ .Values.api.springProfilesActive | quote }}{{ end }}
             - name: SPRING_DATASOURCE_URL
               value: {{ .Values.api.database.url | quote }}
             - name: SPRING_DATASOURCE_USERNAME
               valueFrom: { secretKeyRef: { name: {{ .Values.api.database.existingSecret }}, key: {{ .Values.api.database.usernameKey }} } }
             - name: SPRING_DATASOURCE_PASSWORD
               valueFrom: { secretKeyRef: { name: {{ .Values.api.database.existingSecret }}, key: {{ .Values.api.database.passwordKey }} } }
+            {{- if .Values.api.serverTls.enabled }}
+            - name: ODOC_SERVER_TLS_KEY_STORE
+              value: /tls-server/{{ .Values.api.serverTls.keyStoreKey }}
+            - name: ODOC_SERVER_TLS_KEY_STORE_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ .Values.api.serverTls.existingSecret }}, key: {{ .Values.api.serverTls.keyStorePasswordKey }} } }
+            {{- end }}
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: ["ALL"] }
             runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- if .Values.api.serverTls.enabled }}
+            - name: server-tls
+              mountPath: /tls-server
+              readOnly: true
+            - name: trust-bundle
+              mountPath: /tls
+              readOnly: true
+            {{- end }}
           resources: {{- toYaml .Values.api.resources | nindent 12 }}
+          {{- if .Values.api.serverTls.enabled }}
+          startupProbe:
+            exec: { command: ["sh", "-ec", {{ printf "curl --fail --silent --cacert /tls/%s --resolve %s-api:8080:127.0.0.1 https://%s-api:8080/actuator/health >/dev/null" .Values.api.serverTls.trustBundleKey (include "odoc.name" .) (include "odoc.name" .) | quote }}] }
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            exec: { command: ["sh", "-ec", {{ printf "curl --fail --silent --cacert /tls/%s --resolve %s-api:8080:127.0.0.1 https://%s-api:8080/actuator/health >/dev/null" .Values.api.serverTls.trustBundleKey (include "odoc.name" .) (include "odoc.name" .) | quote }}] }
+            periodSeconds: 5
+          livenessProbe:
+            exec: { command: ["sh", "-ec", {{ printf "curl --fail --silent --cacert /tls/%s --resolve %s-api:8080:127.0.0.1 https://%s-api:8080/actuator/health >/dev/null" .Values.api.serverTls.trustBundleKey (include "odoc.name" .) (include "odoc.name" .) | quote }}] }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          {{- else }}
           startupProbe: { httpGet: { path: /actuator/health, port: http }, failureThreshold: 30, periodSeconds: 2 }
           readinessProbe: { httpGet: { path: /actuator/health, port: http }, initialDelaySeconds: 3, periodSeconds: 5 }
           livenessProbe: { httpGet: { path: /actuator/health, port: http }, initialDelaySeconds: 15, periodSeconds: 10 }
+          {{- end }}
       volumes:
         - name: tmp
-          emptyDir: {}
+          emptyDir: { medium: Memory }
+        {{- if .Values.api.serverTls.enabled }}
+        - name: server-tls
+          secret:
+            secretName: {{ .Values.api.serverTls.existingSecret }}
+        - name: trust-bundle
+          configMap:
+            name: {{ .Values.api.serverTls.trustBundleConfigMap }}
+        {{- end }}
 ---
 {{- if .Values.api.autoscaling.enabled }}
 apiVersion: autoscaling/v2

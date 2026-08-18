@@ -1,0 +1,12 @@
+# Enables only the non-production Phase 0 contract demonstration endpoint.
+# Never include this file in a production deployment.
+services:
+  api:
+    environment:
+      SPRING_PROFILES_ACTIVE: local,tls,thin-slice
+  # The Phase 0 proof does not start the production worker: doing so would run
+  # Flyway/JPA and create the later workspace/page schema that this slice is
+  # specifically meant to avoid. The secure-smoke script omits this service
+  # when this overlay is selected.
+  worker:
+    profiles: ["full-domain-only"]

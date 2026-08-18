@@ -1,0 +1,65 @@
+# Disposable TLS PostgreSQL fixture for kind smoke only. The smoke script creates
+# the referenced Secret/ConfigMap in its temporary namespace and removes them
+# with the cluster. This file must never be used as a production dependency.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: odoc-postgres-tls-config
+data:
+  pg_hba.conf: |
+    local all all trust
+    hostnossl all all all reject
+    hostssl all all all scram-sha-256
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels: { app: postgres }
+    spec:
+      initContainers:
+        - name: prepare-tls
+          image: postgres:17.7-alpine
+          command: ["sh", "-ec", "cp /source/postgres.crt /runtime/postgres.crt; cp /source/postgres.key /runtime/postgres.key; cp /source/ca.crt /runtime/ca.crt; chown postgres:postgres /runtime/*; chmod 0600 /runtime/postgres.key"]
+          volumeMounts:
+            - { name: source-tls, mountPath: /source, readOnly: true }
+            - { name: runtime-tls, mountPath: /runtime }
+      containers:
+        - name: postgres
+          image: postgres:17.7-alpine
+          command: ["sh", "-ec", "exec /usr/local/bin/docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/run/odoc-tls/postgres.crt -c ssl_key_file=/run/odoc-tls/postgres.key -c ssl_ca_file=/run/odoc-tls/ca.crt -c hba_file=/config/pg_hba.conf"]
+          ports: [{ name: postgres, containerPort: 5432 }]
+          env:
+            - { name: POSTGRES_DB, value: odoc }
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: odoc-database, key: username } }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: odoc-database, key: password } }
+          readinessProbe:
+            exec: { command: ["sh", "-ec", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""] }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: runtime-tls, mountPath: /run/odoc-tls, readOnly: true }
+            - { name: config, mountPath: /config, readOnly: true }
+      volumes:
+        - { name: data, emptyDir: {} }
+        - name: source-tls
+          secret: { secretName: odoc-postgres-tls }
+        - { name: runtime-tls, emptyDir: {} }
+        - name: config
+          configMap: { name: odoc-postgres-tls-config }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: postgres }
+spec:
+  selector: { app: postgres }
+  ports: [{ name: postgres, port: 5432, targetPort: postgres }]

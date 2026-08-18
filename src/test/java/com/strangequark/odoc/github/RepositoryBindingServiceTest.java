@@ -5,7 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
-import com.strangequark.odoc.space.SpaceRepository;
+import com.strangequark.odoc.workspace.WorkspaceAccessService;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -18,7 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class RepositoryBindingServiceTest {
     @Mock private RepositoryBindingRepository bindings;
-    @Mock private SpaceRepository spaces;
+    @Mock private WorkspaceAccessService workspaceAccess;
     @Mock private GithubRepositoryClient github;
 
     @Test
@@ -26,11 +26,10 @@ class RepositoryBindingServiceTest {
         UUID spaceId = UUID.randomUUID();
         Instant now = Instant.parse("2026-08-14T00:00:00Z");
         RepositoryBindingService service = new RepositoryBindingService(
-                bindings, spaces, github, Clock.fixed(now, ZoneOffset.UTC));
+                bindings, workspaceAccess, github, Clock.fixed(now, ZoneOffset.UTC));
         GithubFetchedRepository fetched = new GithubFetchedRepository(
                 "spring-projects", "spring-boot", "https://github.com/spring-projects/spring-boot",
                 "Spring Boot", "main", 77_000, "# Spring Boot", "README.adoc");
-        when(spaces.existsById(spaceId)).thenReturn(true);
         when(bindings.existsBySpaceIdAndGithubUrl(spaceId, fetched.canonicalUrl())).thenReturn(false);
         when(github.fetchPublicRepository("spring-projects", "spring-boot")).thenReturn(fetched);
         when(bindings.save(any(RepositoryBinding.class))).thenAnswer(invocation -> invocation.getArgument(0));

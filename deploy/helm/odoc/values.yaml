@@ -1,6 +1,7 @@
 api:
-  # The current MVP uses the local development account (developer/developer).
-  # Replace this profile when the production OIDC configuration is introduced.
+  # The current Phase-0 harness uses a temporary local development account
+  # (developer/developer). P1 replaces it with invite-only email/password
+  # sessions; OIDC/OAuth providers remain optional additions.
   springProfilesActive: local
   image:
     repository: odoc-api
@@ -20,8 +21,36 @@ api:
     existingSecret: odoc-database
     usernameKey: username
     passwordKey: password
+  serverTls:
+    enabled: false
+    existingSecret: ""
+    keyStoreKey: api.p12
+    keyStorePasswordKey: password
+    trustBundleConfigMap: ""
+    trustBundleKey: ca.crt
+
+worker:
+  springProfilesActive: worker
+  image:
+    repository: odoc-api
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  resources:
+    requests: { cpu: 100m, memory: 384Mi }
+    limits: { cpu: 500m, memory: 768Mi }
+  database:
+    url: jdbc:postgresql://postgres:5432/odoc
+    existingSecret: odoc-database
+    usernameKey: username
+    passwordKey: password
+  trustBundleConfigMap: ""
+  trustBundleKey: ca.crt
 
 frontend:
+  runtime:
+    apiBasePath: /api/v1
+    release: local
   image:
     repository: odoc-frontend
     tag: latest
@@ -30,6 +59,10 @@ frontend:
   resources:
     requests: { cpu: 50m, memory: 64Mi }
     limits: { cpu: 250m, memory: 128Mi }
+  upstreamTls:
+    enabled: false
+    trustBundleConfigMap: ""
+    trustBundleKey: ca.crt
 
 ingress:
   enabled: false
@@ -40,3 +73,7 @@ ingress:
   # own equivalent in this map.
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: 26m
+
+# This Phase 0 chart's in-cluster preview traffic is deliberately HTTP-only.
+# Production values must provide the TLS trust/certificate configuration from
+# P0-015/P6; the smoke script proves chart wiring, not production transport.

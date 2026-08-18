@@ -1,6 +1,6 @@
 package com.strangequark.odoc.page;
 
-import com.strangequark.odoc.space.SpaceRepository;
+import com.strangequark.odoc.workspace.WorkspaceAccessService;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -15,17 +15,17 @@ import org.springframework.web.server.ResponseStatusException;
 class PageService {
     private final PageRepository pages;
     private final PageVersionRepository versions;
-    private final SpaceRepository spaces;
+    private final WorkspaceAccessService workspaceAccess;
     private final Clock clock;
 
     @Autowired
-    PageService(PageRepository pages, PageVersionRepository versions, SpaceRepository spaces) {
-        this(pages, versions, spaces, Clock.systemUTC());
+    PageService(PageRepository pages, PageVersionRepository versions, WorkspaceAccessService workspaceAccess) {
+        this(pages, versions, workspaceAccess, Clock.systemUTC());
     }
-    PageService(PageRepository pages, PageVersionRepository versions, SpaceRepository spaces, Clock clock) {
+    PageService(PageRepository pages, PageVersionRepository versions, WorkspaceAccessService workspaceAccess, Clock clock) {
         this.pages = pages;
         this.versions = versions;
-        this.spaces = spaces;
+        this.workspaceAccess = workspaceAccess;
         this.clock = clock;
     }
 
@@ -64,8 +64,10 @@ class PageService {
     @Transactional(readOnly = true)
     List<PageResponse> search(String query) {
         if (query == null || query.isBlank()) return List.of();
+        List<UUID> workspaceIds = workspaceAccess.workspaceIdsForCurrentUser();
+        if (workspaceIds.isEmpty()) return List.of();
         String term = query.trim();
-        return pages.search(term).stream().map(PageResponse::from).toList();
+        return pages.searchInWorkspaces(workspaceIds, term).stream().map(PageResponse::from).toList();
     }
 
     @Transactional(readOnly = true)
@@ -93,14 +95,14 @@ class PageService {
     }
 
     private void requireSpace(UUID spaceId) {
-        if (!spaces.existsById(spaceId)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Space not found.");
-        }
+        workspaceAccess.requireAccessibleSpace(spaceId);
     }
 
     private Page requirePage(UUID pageId) {
-        return pages.findById(pageId)
+        Page page = pages.findById(pageId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Page not found."));
+        workspaceAccess.requireAccessibleSpace(page.getSpaceId());
+        return page;
     }
 
     private UUID requireParentInSpace(UUID spaceId, UUID parentId) {

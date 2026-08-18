@@ -42,6 +42,8 @@ spec:
           env:
             - name: SPRING_PROFILES_ACTIVE
               value: {{ if .Values.api.serverTls.enabled }}{{ printf "%s,tls" .Values.api.springProfilesActive | quote }}{{ else }}{{ .Values.api.springProfilesActive | quote }}{{ end }}
+            - name: ODOC_AUTH_INVITE_ONLY
+              value: {{ .Values.api.auth.inviteOnly | quote }}
             - name: SPRING_DATASOURCE_URL
               value: {{ .Values.api.database.url | quote }}
             - name: SPRING_DATASOURCE_USERNAME

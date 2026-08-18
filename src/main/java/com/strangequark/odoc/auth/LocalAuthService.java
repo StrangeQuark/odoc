@@ -1,5 +1,6 @@
 package com.strangequark.odoc.auth;
 
+import com.strangequark.odoc.audit.AuditPublisher;
 import com.strangequark.odoc.encryption.DataEncryptionKey;
 import com.strangequark.odoc.encryption.DataEncryptionKeyProvider;
 import com.strangequark.odoc.encryption.EncryptionContext;
@@ -42,6 +43,8 @@ public class LocalAuthService {
     private final PasswordEncoder passwords;
     private final OdocAuthProperties properties;
     private final WorkspaceProvisioningService workspaces;
+    private final AuthRateLimitService rateLimits;
+    private final AuditPublisher audit;
 
     LocalAuthService(
             UserAccountRepository users,
@@ -51,7 +54,9 @@ public class LocalAuthService {
             DataEncryptionKeyProvider keys,
             PasswordEncoder passwords,
             OdocAuthProperties properties,
-            WorkspaceProvisioningService workspaces) {
+            WorkspaceProvisioningService workspaces,
+            AuthRateLimitService rateLimits,
+            AuditPublisher audit) {
         this.users = users;
         this.sessions = sessions;
         this.actionTokens = actionTokens;
@@ -60,13 +65,25 @@ public class LocalAuthService {
         this.passwords = passwords;
         this.properties = properties;
         this.workspaces = workspaces;
+        this.rateLimits = rateLimits;
+        this.audit = audit;
     }
 
     @Transactional
-    UserAccount register(String email, String password) {
-        if (!properties.localRegistrationEnabled()) {
+    UserAccount registerSelfService(String email, String password) {
+        if (!properties.selfServiceRegistrationEnabled()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Not found.");
         }
+        return createAccount(email, password, true);
+    }
+
+    /** Creates an account only after the workspace invitation service has validated its verifier. */
+    @Transactional
+    public UUID registerFromInvitation(String email, String password) {
+        return createAccount(email, password, false).id();
+    }
+
+    private UserAccount createAccount(String email, String password, boolean provisionOwnedWorkspace) {
         String normalized = normalizeEmail(email);
         byte[] lookup = lookupToken(normalized);
         if (users.findByEmailLookupToken(lookup).isPresent()) {
@@ -78,18 +95,37 @@ public class LocalAuthService {
                 new EncryptionContext(instanceScope(), id, EncryptionPurpose.IDENTITY, 1),
                 normalized.getBytes(StandardCharsets.UTF_8)));
         UserAccount user = users.save(new UserAccount(id, lookup, envelope, passwords.encode(password), Instant.now()));
-        workspaces.ensureOwnedWorkspace(user.id());
+        if (provisionOwnedWorkspace) {
+            workspaces.ensureOwnedWorkspace(user.id());
+        }
         return user;
     }
 
-    @Transactional(readOnly = true)
-    UserAccount authenticate(String email, String password) {
-        UserAccount user = users.findByEmailLookupToken(lookupToken(normalizeEmail(email)))
+    UserAccount requireActiveAccount(UUID userId) {
+        return users.findById(userId)
                 .filter(UserAccount::active)
                 .orElseThrow(LocalAuthService::invalidCredentials);
-        if (!passwords.matches(password, user.passwordHash())) {
+    }
+
+    @Transactional(readOnly = true)
+    UserAccount authenticate(String email, String password, String origin) {
+        String normalized;
+        try {
+            normalized = normalizeEmail(email);
+        } catch (ResponseStatusException invalid) {
+            rateLimits.assertLoginPermitted(null, origin);
+            rateLimits.recordLoginFailure(null, origin);
             throw invalidCredentials();
         }
+        rateLimits.assertLoginPermitted(normalized, origin);
+        UserAccount user = users.findByEmailLookupToken(lookupToken(normalized))
+                .filter(UserAccount::active)
+                .orElse(null);
+        if (user == null || !passwords.matches(password, user.passwordHash())) {
+            rateLimits.recordLoginFailure(normalized, origin);
+            throw invalidCredentials();
+        }
+        rateLimits.recordLoginSuccess(normalized, origin);
         return user;
     }
 
@@ -101,6 +137,8 @@ public class LocalAuthService {
         AuthSession session = new AuthSession(
                 user.id(), sha256(sessionToken), sha256(csrfToken), now.plus(properties.sessionTtl()), now);
         sessions.save(session);
+        audit.record(null, user.id(), "auth.session.created", "user_account", user.id(), "success",
+                "auth-session-create-" + session.id());
         return new SessionTokens(sessionToken, csrfToken, session.expiresAt());
     }
 
@@ -124,7 +162,7 @@ public class LocalAuthService {
     }
 
     @Transactional
-    void verifyEmail(String verifier) {
+    UserAccount verifyEmail(String verifier) {
         if (verifier == null || verifier.isBlank() || verifier.length() > 256) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This verification link is invalid or expired.");
         }
@@ -139,6 +177,7 @@ public class LocalAuthService {
                         HttpStatus.BAD_REQUEST, "This verification link is invalid or expired."));
         token.consume(now);
         user.markEmailVerified(now);
+        return user;
     }
 
     @Transactional(readOnly = true)
@@ -174,7 +213,7 @@ public class LocalAuthService {
 
     /** Consumes a one-time recovery verifier before replacing the password and invalidating sessions. */
     @Transactional
-    void completePasswordRecovery(String verifier, String nextPassword) {
+    UserAccount completePasswordRecovery(String verifier, String nextPassword) {
         validatePassword(nextPassword);
         if (verifier == null || verifier.isBlank() || verifier.length() > 256) {
             throw invalidRecoveryCode();
@@ -189,6 +228,7 @@ public class LocalAuthService {
         token.consume(now);
         user.changePasswordHash(passwords.encode(nextPassword));
         sessions.findAllByUserIdAndRevokedAtIsNull(user.id()).forEach(session -> session.revoke(now));
+        return user;
     }
 
     /**
@@ -215,9 +255,9 @@ public class LocalAuthService {
         if (sessionToken == null || sessionToken.isBlank()) return null;
         return sessions.findByTokenHash(sha256(sessionToken))
                 .filter(session -> session.usableAt(Instant.now()))
-                .flatMap(session -> users.findById(session.userId()))
-                .filter(UserAccount::active)
-                .map(this::asAuthenticated)
+                .flatMap(session -> users.findById(session.userId())
+                        .filter(UserAccount::active)
+                        .map(user -> asAuthenticated(user, session)))
                 .orElse(null);
     }
 
@@ -239,6 +279,16 @@ public class LocalAuthService {
         sessions.findByTokenHash(sha256(sessionToken)).ifPresent(session -> session.revoke(Instant.now()));
     }
 
+    @Transactional
+    void refreshAuthentication(String sessionToken, UUID userId, String password) {
+        AuthSession session = sessions.findByTokenHash(sha256(sessionToken))
+                .filter(candidate -> candidate.usableAt(Instant.now()) && candidate.userId().equals(userId))
+                .orElseThrow(LocalAuthService::invalidCredentials);
+        UserAccount user = users.findById(userId).filter(UserAccount::active).orElseThrow(LocalAuthService::invalidCredentials);
+        if (!passwords.matches(password, user.passwordHash())) throw invalidCredentials();
+        session.markFreshlyAuthenticated(Instant.now());
+    }
+
     @Transactional(readOnly = true)
     public String emailFor(UUID userId) {
         UserAccount user = users.findById(userId).orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
@@ -247,8 +297,8 @@ public class LocalAuthService {
                 EncryptedRecordCodec.decode(user.emailEnvelope())), StandardCharsets.UTF_8);
     }
 
-    private AuthenticatedUser asAuthenticated(UserAccount user) {
-        return new AuthenticatedUser(user.id(), emailFor(user.id()));
+    private AuthenticatedUser asAuthenticated(UserAccount user, AuthSession session) {
+        return new AuthenticatedUser(user.id(), emailFor(user.id()), user.emailVerified(), session.authenticatedAt());
     }
 
     /** Looks up an active local account without exposing its encrypted identity storage to feature code. */
@@ -296,7 +346,7 @@ public class LocalAuthService {
         return new SecurityScope(SecurityScopeKind.INSTANCE, properties.instanceScopeId());
     }
 
-    private static String normalizeEmail(String email) {
+    static String normalizeEmail(String email) {
         if (email == null) throw invalidCredentials();
         String normalized = email.strip().toLowerCase(Locale.ROOT);
         if (normalized.length() > 320 || !normalized.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {

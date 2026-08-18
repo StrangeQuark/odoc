@@ -1,6 +1,7 @@
 package com.strangequark.odoc.page;
 
 import com.strangequark.odoc.workspace.WorkspaceAccessService;
+import com.strangequark.odoc.authorization.AuthorizationAction;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -31,16 +32,16 @@ class PageService {
 
     @Transactional(readOnly = true)
     List<PageResponse> list(UUID spaceId) {
-        requireSpace(spaceId);
+        requireSpace(spaceId, AuthorizationAction.PAGE_VIEW);
         return pages.findAllBySpaceIdOrderByUpdatedAtDesc(spaceId).stream().map(PageResponse::from).toList();
     }
 
     @Transactional(readOnly = true)
-    PageResponse get(UUID pageId) { return PageResponse.from(requirePage(pageId)); }
+    PageResponse get(UUID pageId) { return PageResponse.from(requirePage(pageId, AuthorizationAction.PAGE_VIEW)); }
 
     @Transactional
     PageResponse create(UUID spaceId, CreatePageRequest request) {
-        requireSpace(spaceId);
+        requireSpace(spaceId, AuthorizationAction.PAGE_CREATE);
         UUID parentId = requireParentInSpace(spaceId, request.parentId());
         Instant now = clock.instant();
         Page page = new Page(UUID.randomUUID(), spaceId, parentId, request.title().trim(), normalizedContent(request.content()), now);
@@ -51,7 +52,7 @@ class PageService {
 
     @Transactional
     PageResponse update(UUID pageId, UpdatePageRequest request) {
-        Page page = requirePage(pageId);
+        Page page = requirePage(pageId, AuthorizationAction.PAGE_EDIT);
         Instant now = clock.instant();
         page.update(request.title().trim(), normalizedContent(request.content()), now);
         snapshot(page, now);
@@ -59,7 +60,7 @@ class PageService {
     }
 
     @Transactional
-    void delete(UUID pageId) { pages.delete(requirePage(pageId)); }
+    void delete(UUID pageId) { pages.delete(requirePage(pageId, AuthorizationAction.PAGE_ARCHIVE)); }
 
     @Transactional(readOnly = true)
     List<PageResponse> search(String query) {
@@ -72,13 +73,13 @@ class PageService {
 
     @Transactional(readOnly = true)
     List<PageVersionResponse> history(UUID pageId) {
-        requirePage(pageId);
+        requirePage(pageId, AuthorizationAction.PAGE_VIEW);
         return versions.findAllByPageIdOrderByVersionNumberDesc(pageId).stream().map(PageVersionResponse::from).toList();
     }
 
     @Transactional
     PageResponse restore(UUID pageId, UUID versionId) {
-        Page page = requirePage(pageId);
+        Page page = requirePage(pageId, AuthorizationAction.PAGE_EDIT);
         PageVersion version = versions.findById(versionId)
                 .filter(candidate -> candidate.getPageId().equals(pageId))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Page version not found."));
@@ -94,20 +95,20 @@ class PageService {
         versions.save(new PageVersion(UUID.randomUUID(), page.getId(), nextVersion, page.getTitle(), page.getContent(), now));
     }
 
-    private void requireSpace(UUID spaceId) {
-        workspaceAccess.requireAccessibleSpace(spaceId);
+    private void requireSpace(UUID spaceId, AuthorizationAction action) {
+        workspaceAccess.requireSpaceAction(spaceId, action);
     }
 
-    private Page requirePage(UUID pageId) {
+    private Page requirePage(UUID pageId, AuthorizationAction action) {
         Page page = pages.findById(pageId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Page not found."));
-        workspaceAccess.requireAccessibleSpace(page.getSpaceId());
+        workspaceAccess.requireSpaceAction(page.getSpaceId(), action);
         return page;
     }
 
     private UUID requireParentInSpace(UUID spaceId, UUID parentId) {
         if (parentId == null) return null;
-        Page parent = requirePage(parentId);
+        Page parent = requirePage(parentId, AuthorizationAction.PAGE_CREATE);
         if (!parent.getSpaceId().equals(spaceId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Parent page must belong to the same space.");
         }

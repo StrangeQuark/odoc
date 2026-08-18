@@ -2,9 +2,22 @@ package com.strangequark.odoc.media;
 
 import com.strangequark.odoc.page.PageRepository;
 import com.strangequark.odoc.page.PageVersionRepository;
+import com.strangequark.odoc.space.SpaceRepository;
+import com.strangequark.odoc.encryption.EncryptionContext;
+import com.strangequark.odoc.encryption.EncryptionPurpose;
+import com.strangequark.odoc.encryption.ManagedEncryptionException;
+import com.strangequark.odoc.encryption.ManagedRecordEncryption;
+import com.strangequark.odoc.encryption.SecurityScope;
+import com.strangequark.odoc.encryption.SecurityScopeKind;
+import com.strangequark.odoc.storage.ObjectStorage;
+import com.strangequark.odoc.storage.ObjectStorageException;
 import com.strangequark.odoc.workspace.WorkspaceAccessService;
+import com.strangequark.odoc.workspace.WorkspaceRepository;
+import com.strangequark.odoc.authorization.AuthorizationAction;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Set;
@@ -22,6 +35,9 @@ class MediaAssetService {
     static final long MAX_IMAGE_BYTES = 10L * 1024 * 1024;
     static final long MAX_VIDEO_BYTES = 25L * 1024 * 1024;
     static final int ORPHAN_CLEANUP_BATCH_SIZE = 100;
+    private static final String OBJECT_PREFIX = "workspaces/";
+    private static final java.util.regex.Pattern OWNED_OBJECT_KEY = java.util.regex.Pattern.compile(
+            "^workspaces/[0-9a-fA-F-]{36}/media/[0-9a-fA-F-]{36}/payload\\.odm$");
     private static final int WEBM_HEADER_SCAN_LIMIT_BYTES = 4 * 1024;
     private static final Set<String> IMAGE_TYPES = Set.of("image/png", "image/jpeg", "image/gif", "image/webp", "image/avif");
     private static final Set<String> SUPPORTED_TYPES = Set.of("image/png", "image/jpeg", "image/gif", "image/webp", "image/avif", "video/mp4", "video/webm", "video/ogg");
@@ -29,26 +45,36 @@ class MediaAssetService {
     private final WorkspaceAccessService workspaceAccess;
     private final PageRepository pages;
     private final PageVersionRepository versions;
+    private final SpaceRepository spaces;
+    private final WorkspaceRepository workspaces;
+    private final ObjectStorage objectStorage;
+    private final ManagedRecordEncryption encryption;
     private final Clock clock;
 
     @Autowired
     MediaAssetService(MediaAssetRepository assets, WorkspaceAccessService workspaceAccess, PageRepository pages,
-            PageVersionRepository versions) {
-        this(assets, workspaceAccess, pages, versions, Clock.systemUTC());
+            PageVersionRepository versions, SpaceRepository spaces, WorkspaceRepository workspaces, ObjectStorage objectStorage,
+            ManagedRecordEncryption encryption) {
+        this(assets, workspaceAccess, pages, versions, spaces, workspaces, objectStorage, encryption, Clock.systemUTC());
     }
 
     MediaAssetService(MediaAssetRepository assets, WorkspaceAccessService workspaceAccess, PageRepository pages,
-            PageVersionRepository versions, Clock clock) {
+            PageVersionRepository versions, SpaceRepository spaces, WorkspaceRepository workspaces, ObjectStorage objectStorage,
+            ManagedRecordEncryption encryption, Clock clock) {
         this.assets = assets;
         this.workspaceAccess = workspaceAccess;
         this.pages = pages;
         this.versions = versions;
+        this.spaces = spaces;
+        this.workspaces = workspaces;
+        this.objectStorage = objectStorage;
+        this.encryption = encryption;
         this.clock = clock;
     }
 
     @Transactional
     MediaAssetResponse upload(UUID spaceId, MultipartFile file) {
-        workspaceAccess.requireAccessibleSpace(spaceId);
+        workspaceAccess.requireSpaceAction(spaceId, AuthorizationAction.ATTACHMENT_UPLOAD);
         String contentType = file.getContentType();
         if (contentType == null || contentType.isBlank() || !SUPPORTED_TYPES.contains(contentType)) {
             throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
@@ -66,9 +92,27 @@ class MediaAssetService {
                 throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
                         "The uploaded file does not match its declared media type.");
             }
-            MediaAsset asset = new MediaAsset(UUID.randomUUID(), spaceId, safeFilename(file.getOriginalFilename()),
-                    contentType, bytes, clock.instant());
-            return MediaAssetResponse.from(assets.save(asset));
+            UUID workspaceId = workspaces.findSecurityScopeIdById(workspaceIdForSpace(spaceId))
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Workspace not found."));
+            UUID assetId = UUID.randomUUID();
+            String objectKey = objectKey(workspaceId, assetId);
+            byte[] ciphertext = MediaEncryptedRecordCodec.encode(encryption.encrypt(
+                    new EncryptionContext(new SecurityScope(SecurityScopeKind.WORKSPACE, workspaceId), assetId,
+                            EncryptionPurpose.MEDIA, 1), bytes));
+            try {
+                objectStorage.put(objectKey, ciphertext, "application/octet-stream");
+            } catch (ObjectStorageException exception) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Media storage is unavailable.", exception);
+            }
+            MediaAsset asset = new MediaAsset(assetId, spaceId, safeFilename(file.getOriginalFilename()),
+                    contentType, objectKey, sha256(bytes), bytes.length, clock.instant());
+            try {
+                asset = assets.save(asset);
+            } catch (RuntimeException exception) {
+                bestEffortDelete(objectKey);
+                throw exception;
+            }
+            return MediaAssetResponse.from(asset);
         } catch (IOException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Could not read uploaded media.", exception);
         }
@@ -78,15 +122,26 @@ class MediaAssetService {
     MediaAsset get(UUID id) {
         MediaAsset asset = assets.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Media not found."));
-        workspaceAccess.requireAccessibleSpace(asset.spaceId());
+        workspaceAccess.requireSpaceAction(asset.spaceId(), AuthorizationAction.ATTACHMENT_VIEW);
         return asset;
+    }
+
+    @Transactional(readOnly = true)
+    MediaContent download(UUID id) {
+        MediaAsset asset = get(id);
+        if (!asset.available()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Media not found.");
+        byte[] content = asset.storedExternally() ? downloadExternal(asset) : asset.content();
+        if (content == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Media not found.");
+        return new MediaContent(asset, content);
     }
 
     @Transactional
     boolean deleteIfUnreferenced(UUID id) {
-        get(id);
+        MediaAsset asset = assets.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Media not found."));
+        workspaceAccess.requireSpaceAction(asset.spaceId(), AuthorizationAction.ATTACHMENT_DELETE);
         if (isReferenced(id)) return false;
-        return assets.deleteDirectlyById(id) > 0;
+        return deleteAsset(asset);
     }
 
     /**
@@ -97,12 +152,13 @@ class MediaAssetService {
     @Transactional
     int deleteUnreferencedOlderThan(Instant cutoff) {
         int removed = 0;
-        for (UUID id : assets.findIdsByCreatedAtBefore(cutoff,
+        for (MediaAssetRepository.MediaAssetStorageReference asset : assets.findStorageReferencesByCreatedAtBefore(cutoff,
                 PageRequest.of(0, ORPHAN_CLEANUP_BATCH_SIZE))) {
-            if (!isReferenced(id) && assets.deleteDirectlyById(id) > 0) {
+            if (!isReferenced(asset.getId()) && deleteStorageReference(asset)) {
                 removed++;
             }
         }
+        removed += deleteUnknownObjectsOlderThan(cutoff);
         return removed;
     }
 
@@ -110,6 +166,86 @@ class MediaAssetService {
         if (filename == null || filename.isBlank()) return "media";
         return filename.replaceAll("[^A-Za-z0-9._-]", "_");
     }
+
+    private UUID workspaceIdForSpace(UUID spaceId) {
+        return spaces.findWorkspaceIdById(spaceId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Space not found."));
+    }
+
+    private static String objectKey(UUID workspaceSecurityScopeId, UUID assetId) {
+        return "workspaces/" + workspaceSecurityScopeId + "/media/" + assetId + "/payload.odm";
+    }
+
+    private byte[] downloadExternal(MediaAsset asset) {
+        try {
+            UUID workspaceScopeId = workspaces.findSecurityScopeIdById(workspaceIdForSpace(asset.spaceId()))
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Workspace not found."));
+            byte[] plaintext = encryption.decrypt(new EncryptionContext(
+                    new SecurityScope(SecurityScopeKind.WORKSPACE, workspaceScopeId), asset.id(),
+                    EncryptionPurpose.MEDIA, 1), MediaEncryptedRecordCodec.decode(objectStorage.get(asset.objectKey())));
+            if (plaintext.length != asset.sizeBytes() || !sha256(plaintext).equals(asset.contentSha256())) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Media not found.");
+            }
+            return plaintext;
+        } catch (ObjectStorageException | ManagedEncryptionException | IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Media not found.");
+        }
+    }
+
+    private boolean deleteAsset(MediaAsset asset) {
+        asset.markDeletionPending();
+        assets.save(asset);
+        if (asset.storedExternally()) {
+            try {
+                objectStorage.delete(asset.objectKey());
+            } catch (ObjectStorageException exception) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Media storage is unavailable.", exception);
+            }
+        }
+        return assets.deleteDirectlyById(asset.id()) > 0;
+    }
+
+    private boolean deleteStorageReference(MediaAssetRepository.MediaAssetStorageReference asset) {
+        assets.markDeletionPending(asset.getId());
+        if (asset.getObjectKey() != null) {
+            try {
+                objectStorage.delete(asset.getObjectKey());
+            } catch (ObjectStorageException exception) {
+                return false;
+            }
+        }
+        return assets.deleteDirectlyById(asset.getId()) > 0;
+    }
+
+    private int deleteUnknownObjectsOlderThan(Instant cutoff) {
+        try {
+            int removed = 0;
+            for (ObjectStorage.StoredObject object : objectStorage.list(OBJECT_PREFIX, ORPHAN_CLEANUP_BATCH_SIZE)) {
+                if (object.lastModified() != null && object.lastModified().isBefore(cutoff)
+                        && OWNED_OBJECT_KEY.matcher(object.key()).matches() && !assets.existsByObjectKey(object.key())) {
+                    objectStorage.delete(object.key());
+                    removed++;
+                }
+            }
+            return removed;
+        } catch (ObjectStorageException exception) {
+            return 0;
+        }
+    }
+
+    private void bestEffortDelete(String objectKey) {
+        try { objectStorage.delete(objectKey); } catch (ObjectStorageException ignored) { /* scheduled cleanup reconciles metadata */ }
+    }
+
+    private static String sha256(byte[] bytes) {
+        try {
+            return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable.", exception);
+        }
+    }
+
+    record MediaContent(MediaAsset asset, byte[] content) {}
 
     private boolean isReferenced(UUID assetId) {
         String path = "/api/v1/media/" + assetId;

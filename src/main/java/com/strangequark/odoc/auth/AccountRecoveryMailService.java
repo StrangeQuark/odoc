@@ -37,14 +37,15 @@ public class AccountRecoveryMailService {
         mailSender.send(message);
     }
 
-    public void sendWorkspaceInvitation(String recipient, String workspaceName, String verifier) {
+    public void sendWorkspaceInvitation(String recipient, String workspaceName, java.util.UUID routeId, String verifier) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom("noreply@odoc.local");
         message.setTo(recipient);
         message.setSubject("You were invited to " + workspaceName + " on Odoc");
-        message.setText("Use this one-time Odoc workspace invitation code after signing in:\n\n"
-                + verifier
-                + "\n\nIt expires in seven days. If you did not expect this invitation, you can ignore this email.");
+        message.setText("Open this one-time Odoc workspace invitation link:\n\n"
+                + "https://odoc.local/invitations/" + routeId + "#v=" + verifier
+                + "\n\nThe secret verifier is kept in the fragment and is never sent in the request URL. "
+                + "It expires in seven days. If you did not expect this invitation, you can ignore this email.");
         mailSender.send(message);
     }
 }

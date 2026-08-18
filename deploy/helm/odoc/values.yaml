@@ -1,8 +1,11 @@
 api:
-  # The current Phase-0 harness uses a temporary local development account
-  # (developer/developer). P1 replaces it with invite-only email/password
-  # sessions; OIDC/OAuth providers remain optional additions.
+  # The local/private MVP uses email/password cookie sessions. OIDC/OAuth
+  # providers remain optional additions.
   springProfilesActive: local
+  auth:
+    # Require a one-time workspace invitation code when creating an account.
+    # Sign-in, recovery, and invitation redemption still work.
+    inviteOnly: false
   image:
     repository: odoc-api
     tag: latest

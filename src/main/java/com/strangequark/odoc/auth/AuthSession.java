@@ -18,6 +18,7 @@ class AuthSession {
     @Column(name = "expires_at", nullable = false) private Instant expiresAt;
     @Column(name = "revoked_at") private Instant revokedAt;
     @Column(name = "created_at", nullable = false) private Instant createdAt;
+    @Column(name = "authenticated_at", nullable = false) private Instant authenticatedAt;
 
     protected AuthSession() {}
 
@@ -28,11 +29,15 @@ class AuthSession {
         this.csrfTokenHash = Arrays.copyOf(csrfTokenHash, csrfTokenHash.length);
         this.expiresAt = expiresAt;
         this.createdAt = createdAt;
+        this.authenticatedAt = createdAt;
     }
 
     UUID userId() { return userId; }
+    UUID id() { return id; }
     boolean usableAt(Instant now) { return revokedAt == null && expiresAt.isAfter(now); }
     boolean hasCsrfHash(byte[] expected) { return java.security.MessageDigest.isEqual(csrfTokenHash, expected); }
     Instant expiresAt() { return expiresAt; }
+    Instant authenticatedAt() { return authenticatedAt; }
+    void markFreshlyAuthenticated(Instant now) { authenticatedAt = now; }
     void revoke(Instant now) { revokedAt = now; }
 }

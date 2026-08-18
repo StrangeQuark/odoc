@@ -60,6 +60,7 @@ class PostgresApiIntegrationTest {
         registry.add("odoc.database.statement-timeout", () -> "300ms");
         registry.add("odoc.database.lock-timeout", () -> "100ms");
         registry.add("odoc.database.idle-in-transaction-timeout", () -> "250ms");
+        registry.add("odoc.auth.invitation-exchange-attempt-limit", () -> "3");
         registry.add("odoc.encryption.managed.enabled", () -> "true");
         registry.add("odoc.encryption.managed.wrapping-key-base64", () ->
                 Base64.getEncoder().encodeToString(new byte[] {
@@ -142,6 +143,69 @@ class PostgresApiIntegrationTest {
                 .contains("\"name\":\"Odoc\"")
                 .contains("\"status\":\"ok\"")
                 .contains("\"timestamp\"");
+    }
+
+    @Test
+    void appliesTheSameOriginAndProxyHeaderSecurityPolicyBeforeAuthentication() throws Exception {
+        HttpClient client = HttpClient.newHttpClient();
+
+        HttpResponse<String> api = client.send(
+                HttpRequest.newBuilder(URI.create(url("/api/v1/system/info"))).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(api.statusCode()).isEqualTo(200);
+        assertThat(api.headers().firstValue("Cache-Control")).contains("no-store");
+        assertThat(api.headers().firstValue("Pragma")).contains("no-cache");
+        assertThat(api.headers().firstValue("X-Content-Type-Options")).contains("nosniff");
+        assertThat(api.headers().firstValue("X-Frame-Options")).contains("DENY");
+        assertThat(api.headers().firstValue("Referrer-Policy")).contains("no-referrer");
+        assertThat(api.headers().firstValue("Cross-Origin-Resource-Policy")).contains("same-origin");
+
+        HttpResponse<String> rejectedOrigin = client.send(HttpRequest.newBuilder(URI.create(url("/api/v1/auth/login")))
+                .header("Origin", "https://evil.example")
+                .header("Access-Control-Request-Method", "POST")
+                .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
+                .build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(rejectedOrigin.statusCode()).isEqualTo(403);
+        assertThat(rejectedOrigin.body()).doesNotContain("evil.example");
+
+        String sameOrigin = "http://localhost:" + port;
+        HttpResponse<String> allowedOrigin = client.send(HttpRequest.newBuilder(URI.create(url("/api/v1/auth/login")))
+                .header("Origin", sameOrigin)
+                .header("Access-Control-Request-Method", "POST")
+                .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
+                .build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(allowedOrigin.statusCode()).isEqualTo(204);
+        assertThat(allowedOrigin.headers().firstValue("Access-Control-Allow-Origin")).contains(sameOrigin);
+        assertThat(allowedOrigin.headers().firstValue("Access-Control-Allow-Credentials")).contains("true");
+
+        HttpResponse<String> forwardedSpoof = client.send(HttpRequest.newBuilder(URI.create(url("/api/v1/system/info")))
+                .header("X-Forwarded-For", "203.0.113.7")
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(forwardedSpoof.statusCode()).isEqualTo(400);
+        assertThat(forwardedSpoof.body()).doesNotContain("203.0.113.7");
+
+        HttpResponse<String> oversizedHeader = client.send(HttpRequest.newBuilder(URI.create(url("/api/v1/system/info")))
+                .header("X-Odoc-Test-Padding", "x".repeat(17 * 1024))
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(oversizedHeader.statusCode()).isIn(400, 431);
+
+        UUID unknownInvitation = UUID.randomUUID();
+        for (int attempt = 0; attempt < 3; attempt++) {
+            HttpResponse<String> invalidInvitation = client.send(HttpRequest.newBuilder(
+                            URI.create(url("/api/v1/invitations/" + unknownInvitation + "/exchange")))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"verifier\":\"not-a-real-invitation\"}"))
+                    .build(), HttpResponse.BodyHandlers.ofString());
+            assertThat(invalidInvitation.statusCode()).isEqualTo(400);
+            assertThat(invalidInvitation.body()).doesNotContain("not-a-real-invitation");
+        }
+        HttpResponse<String> throttledInvitation = client.send(HttpRequest.newBuilder(
+                        URI.create(url("/api/v1/invitations/" + unknownInvitation + "/exchange")))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("{\"verifier\":\"not-a-real-invitation\"}"))
+                .build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(throttledInvitation.statusCode()).isEqualTo(429);
+        assertThat(throttledInvitation.body()).doesNotContain("not-a-real-invitation");
     }
 
     @Test
@@ -271,6 +335,7 @@ class PostgresApiIntegrationTest {
         assertThat(registration.headers().allValues("Set-Cookie")).anySatisfy(cookie -> {
             assertThat(cookie).contains("ODOC_SESSION=").contains("HttpOnly").contains("SameSite=Strict");
         });
+        UUID registeredUserId = UUID.fromString(registration.body().replaceFirst(".*\\\"userId\\\":\\\"([^\\\"]+)\\\".*", "$1"));
 
         String csrf = cookies.getCookieStore().getCookies().stream()
                 .filter(cookie -> cookie.getName().equals("ODOC_CSRF"))
@@ -317,6 +382,21 @@ class PostgresApiIntegrationTest {
                 .orElseThrow()
                 .getValue();
 
+        HttpResponse<String> wrongFreshAuthentication = client.send(HttpRequest.newBuilder(
+                        URI.create(url("/api/v1/auth/fresh-authentication")))
+                .header("Content-Type", "application/json")
+                .header("X-Odoc-Csrf", csrf)
+                .POST(HttpRequest.BodyPublishers.ofString("{\"password\":\"wrong-password\"}"))
+                .build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(wrongFreshAuthentication.statusCode()).isEqualTo(401);
+        HttpResponse<String> freshAuthentication = client.send(HttpRequest.newBuilder(
+                        URI.create(url("/api/v1/auth/fresh-authentication")))
+                .header("Content-Type", "application/json")
+                .header("X-Odoc-Csrf", csrf)
+                .POST(HttpRequest.BodyPublishers.ofString("{\"password\":\"" + changedPassword + "\"}"))
+                .build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(freshAuthentication.statusCode()).isEqualTo(204);
+
         HttpClient passwordLoginClient = HttpClient.newHttpClient();
         HttpResponse<String> oldPasswordLogin = passwordLoginClient.send(HttpRequest.newBuilder(URI.create(url("/api/v1/auth/login")))
                 .header("Content-Type", "application/json")
@@ -329,6 +409,13 @@ class PostgresApiIntegrationTest {
                         "{\"email\":\"" + email + "\",\"password\":\"" + changedPassword + "\"}"))
                 .build(), HttpResponse.BodyHandlers.ofString());
         assertThat(newPasswordLogin.statusCode()).isEqualTo(200);
+
+        HttpResponse<String> unverifiedWorkspaceAccess = client.send(
+                HttpRequest.newBuilder(URI.create(url("/api/v1/workspaces"))).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertThat(unverifiedWorkspaceAccess.statusCode()).isEqualTo(403);
+        assertThat(unverifiedWorkspaceAccess.body()).contains("Email verification required");
+        markEmailVerified(registeredUserId);
 
         HttpResponse<String> missingCsrf = client.send(HttpRequest.newBuilder(URI.create(url("/api/v1/spaces")))
                 .header("Content-Type", "application/json")
@@ -370,6 +457,8 @@ class PostgresApiIntegrationTest {
                         "{\"email\":\"" + otherEmail + "\",\"password\":\"" + password + "\"}"))
                 .build(), HttpResponse.BodyHandlers.ofString());
         assertThat(otherRegistration.statusCode()).isEqualTo(201);
+        UUID otherUserId = UUID.fromString(otherRegistration.body().replaceFirst(".*\\\"userId\\\":\\\"([^\\\"]+)\\\".*", "$1"));
+        markEmailVerified(otherUserId);
 
         HttpResponse<String> isolatedSpaces = otherClient.send(
                 HttpRequest.newBuilder(URI.create(url("/api/v1/spaces"))).GET().build(), HttpResponse.BodyHandlers.ofString());
@@ -446,6 +535,29 @@ class PostgresApiIntegrationTest {
                 .build(), HttpResponse.BodyHandlers.ofString());
         assertThat(invalidLogin.statusCode()).isEqualTo(401);
         assertThat(invalidLogin.body()).doesNotContain(email);
+        for (int attempt = 0; attempt < 4; attempt++) {
+            HttpResponse<String> repeatedInvalidLogin = client.send(HttpRequest.newBuilder(URI.create(url("/api/v1/auth/login")))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(
+                            "{\"email\":\"" + email + "\",\"password\":\"wrong-password\"}"))
+                    .build(), HttpResponse.BodyHandlers.ofString());
+            assertThat(repeatedInvalidLogin.statusCode()).isEqualTo(401);
+        }
+        HttpResponse<String> throttledLogin = client.send(HttpRequest.newBuilder(URI.create(url("/api/v1/auth/login")))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        "{\"email\":\"" + email + "\",\"password\":\"wrong-password\"}"))
+                .build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(throttledLogin.statusCode()).isEqualTo(429);
+    }
+
+    private void markEmailVerified(UUID userId) throws Exception {
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement update = connection.prepareStatement(
+                        "UPDATE user_accounts SET email_verified_at = CURRENT_TIMESTAMP WHERE id = ?")) {
+            update.setObject(1, userId);
+            assertThat(update.executeUpdate()).isEqualTo(1);
+        }
     }
 
     private String url(String path) { return "http://localhost:" + port + path; }

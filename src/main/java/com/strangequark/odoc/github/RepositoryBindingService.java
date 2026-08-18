@@ -1,6 +1,7 @@
 package com.strangequark.odoc.github;
 
 import com.strangequark.odoc.workspace.WorkspaceAccessService;
+import com.strangequark.odoc.authorization.AuthorizationAction;
 import java.net.URI;
 import java.time.Clock;
 import java.util.List;
@@ -34,13 +35,13 @@ class RepositoryBindingService {
 
     @Transactional(readOnly = true)
     List<RepositoryBindingResponse> list(UUID spaceId) {
-        requireSpace(spaceId);
+        requireSpace(spaceId, AuthorizationAction.REPOSITORY_VIEW);
         return bindings.findAllBySpaceIdOrderByRepositoryNameAsc(spaceId).stream().map(RepositoryBindingResponse::from).toList();
     }
 
     @Transactional
     RepositoryBindingResponse attach(UUID spaceId, AttachGithubRepositoryRequest request) {
-        requireSpace(spaceId);
+        requireSpace(spaceId, AuthorizationAction.REPOSITORY_CONNECT);
         GithubCoordinates coordinates = GithubCoordinates.parse(request.url());
         String canonicalUrl = "https://github.com/" + coordinates.owner() + "/" + coordinates.repository();
         if (bindings.existsBySpaceIdAndGithubUrl(spaceId, canonicalUrl)) {
@@ -51,8 +52,8 @@ class RepositoryBindingService {
         return RepositoryBindingResponse.from(bindings.save(binding));
     }
 
-    private void requireSpace(UUID spaceId) {
-        workspaceAccess.requireAccessibleSpace(spaceId);
+    private void requireSpace(UUID spaceId, AuthorizationAction action) {
+        workspaceAccess.requireSpaceAction(spaceId, action);
     }
 
     private record GithubCoordinates(String owner, String repository) {

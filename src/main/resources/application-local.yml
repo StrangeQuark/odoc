@@ -17,6 +17,15 @@ spring:
       password: "{noop}${ODOC_DEV_PASSWORD:developer}"
 
 odoc:
+  object-storage:
+    enabled: ${ODOC_OBJECT_STORAGE_ENABLED:true}
+    endpoint: ${ODOC_OBJECT_STORAGE_ENDPOINT:http://localhost:9000}
+    region: ${ODOC_OBJECT_STORAGE_REGION:us-east-1}
+    bucket: ${ODOC_OBJECT_STORAGE_BUCKET:odoc-media}
+    access-key: ${ODOC_OBJECT_STORAGE_ACCESS_KEY:${ODOC_MINIO_ROOT_USER:odoc-minio}}
+    secret-key: ${ODOC_OBJECT_STORAGE_SECRET_KEY:${ODOC_MINIO_ROOT_PASSWORD:odoc-minio-local-only}}
+    path-style: ${ODOC_OBJECT_STORAGE_PATH_STYLE:true}
+    require-tls: ${ODOC_OBJECT_STORAGE_REQUIRE_TLS:false}
   encryption:
     managed:
       enabled: ${ODOC_MANAGED_ENCRYPTION_ENABLED:true}
@@ -24,4 +33,5 @@ odoc:
       wrapping-key-base64: ${ODOC_MANAGED_ENCRYPTION_WRAPPING_KEY_BASE64:AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA}
   auth:
     local-registration-enabled: ${ODOC_AUTH_LOCAL_REGISTRATION_ENABLED:true}
+    invite-only: ${ODOC_AUTH_INVITE_ONLY:false}
     secure-cookies: ${ODOC_AUTH_SECURE_COOKIES:false}

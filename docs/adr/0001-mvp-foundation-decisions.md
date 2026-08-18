@@ -34,10 +34,14 @@ handwritten MVP calls are transitional and must not become the sole contract sou
 
 ## ADR-005 — Identity and sessions
 
-Use invite-only built-in email/password accounts for the MVP. Passwords use an
-ADR-selected memory-hard one-way hash; the browser uses secure HttpOnly cookie sessions
-and CSRF protection, never stored credentials or tokens. OIDC/OAuth/SSO are optional,
-explicit account-linking providers. MFA/passkeys are P5-531 hardening work.
+Use built-in email/password accounts for the MVP. The approved local/private profile
+allows normal self-service registration and requires email verification before workspace
+or document access; invitations govern workspace membership. A future deployment may
+select an invite-only or allowlist enrollment policy through an explicit configuration
+decision. Passwords use an ADR-selected memory-hard one-way hash; the browser uses
+secure HttpOnly cookie sessions and CSRF protection, never stored credentials or tokens.
+OIDC/OAuth/SSO are optional, explicit account-linking providers. MFA/passkeys are
+P5-531 hardening work.
 
 ## ADR-006 — PostgreSQL data model
 
@@ -126,5 +130,5 @@ exception; it is never production evidence.
 their package acceptance must be reconciled to this ADR and recorded with reproducible
 build evidence. The next feature implementation begins only after `M0-GATE`: first
 `P1-100`, then the shared managed-encryption core `P1-115`, followed by the built-in
-invite-only account and secure-session work in `P1-101`. Shared Basic Auth remains
+email/password account and secure-session work in `P1-101`. Shared Basic Auth remains
 development-only and must not become the production identity boundary.

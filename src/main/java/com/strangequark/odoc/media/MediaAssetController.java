@@ -31,13 +31,14 @@ class MediaAssetController {
 
     @GetMapping("/api/v1/media/{id}")
     ResponseEntity<ByteArrayResource> get(@PathVariable UUID id) {
-        MediaAsset asset = assets.get(id);
+        MediaAssetService.MediaContent content = assets.download(id);
+        MediaAsset asset = content.asset();
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + asset.filename() + "\"")
                 .contentType(MediaType.parseMediaType(asset.contentType()))
                 .contentLength(asset.sizeBytes())
-                .body(new ByteArrayResource(asset.content()));
+                .body(new ByteArrayResource(content.content()));
     }
 
     @DeleteMapping("/api/v1/media/{id}")

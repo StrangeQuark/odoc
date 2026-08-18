@@ -5,7 +5,12 @@
   "additionalProperties": false,
   "required": ["api", "worker", "frontend", "ingress"],
   "properties": {
-    "api": { "$ref": "#/$defs/application" },
+    "api": {
+      "allOf": [
+        { "$ref": "#/$defs/application" },
+        { "required": ["auth"] }
+      ]
+    },
     "worker": { "$ref": "#/$defs/application" },
     "frontend": {
       "type": "object",
@@ -97,6 +102,12 @@
       "required": ["springProfilesActive", "image", "replicaCount", "resources", "database"],
       "properties": {
         "springProfilesActive": { "type": "string", "minLength": 1 },
+        "auth": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["inviteOnly"],
+          "properties": { "inviteOnly": { "type": "boolean" } }
+        },
         "image": { "$ref": "#/$defs/image" },
         "replicaCount": { "type": "integer", "minimum": 1 },
         "resources": { "$ref": "#/$defs/resources" },

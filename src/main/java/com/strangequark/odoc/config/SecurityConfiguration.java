@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.beans.factory.ObjectProvider;
 import com.strangequark.odoc.auth.SessionAuthenticationFilter;
 import com.strangequark.odoc.auth.SessionCsrfFilter;
+import com.strangequark.odoc.auth.EmailVerificationGateFilter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -26,7 +27,8 @@ public class SecurityConfiguration {
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             ObjectProvider<SessionAuthenticationFilter> sessionFilter,
-            ObjectProvider<SessionCsrfFilter> csrfFilter)
+            ObjectProvider<SessionCsrfFilter> csrfFilter,
+            ObjectProvider<EmailVerificationGateFilter> verificationGate)
             throws Exception {
         var security = http
                 .csrf(csrf -> csrf.disable()) // Cookie sessions use the explicit filter below; Basic stays stateless.
@@ -38,8 +40,9 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(
                                 "/actuator/health/**", "/api/v1/system/info", "/v3/api-docs/**", "/api/v1/auth/register",
+                                "/api/v1/auth/registration-policy",
                                 "/api/v1/auth/login", "/api/v1/auth/email-verification",
-                                "/api/v1/auth/password-recovery/**")
+                                "/api/v1/auth/password-recovery/**", "/api/v1/invitations/*/exchange")
                         .permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions
@@ -62,6 +65,10 @@ public class SecurityConfiguration {
         SessionCsrfFilter csrf = csrfFilter.getIfAvailable();
         if (csrf != null) {
             security.addFilterAfter(csrf, SessionAuthenticationFilter.class);
+        }
+        EmailVerificationGateFilter gate = verificationGate.getIfAvailable();
+        if (gate != null) {
+            security.addFilterAfter(gate, SessionCsrfFilter.class);
         }
         return security.build();
     }

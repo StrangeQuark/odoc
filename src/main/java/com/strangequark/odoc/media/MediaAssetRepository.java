@@ -11,14 +11,27 @@ import org.springframework.data.repository.query.Param;
 
 interface MediaAssetRepository extends JpaRepository<MediaAsset, UUID> {
     /**
-     * Deliberately projects only IDs. Loading {@link MediaAsset} here would
-     * materialize its bytea content for every abandoned upload in the sweep.
+     * Deliberately projects only routing metadata. Loading {@link MediaAsset}
+     * here would materialize a legacy bytea payload for every abandoned upload.
      */
-    @Query("select asset.id from MediaAsset asset where asset.createdAt < :cutoff order by asset.createdAt asc")
-    List<UUID> findIdsByCreatedAtBefore(@Param("cutoff") Instant cutoff, Pageable pageable);
+    @Query("select asset.id as id, asset.objectKey as objectKey from MediaAsset asset "
+            + "where asset.createdAt < :cutoff order by asset.createdAt asc")
+    List<MediaAssetStorageReference> findStorageReferencesByCreatedAtBefore(
+            @Param("cutoff") Instant cutoff, Pageable pageable);
 
     /** Deletes without selecting the media blob into the application first. */
     @Modifying
     @Query("delete from MediaAsset asset where asset.id = :id")
     int deleteDirectlyById(@Param("id") UUID id);
+
+    @Modifying
+    @Query(value = "update media_assets set storage_state = 'DELETE_PENDING' where id = :id", nativeQuery = true)
+    int markDeletionPending(@Param("id") UUID id);
+
+    boolean existsByObjectKey(String objectKey);
+
+    interface MediaAssetStorageReference {
+        UUID getId();
+        String getObjectKey();
+    }
 }

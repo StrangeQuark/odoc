@@ -10,7 +10,12 @@ import static org.mockito.Mockito.when;
 
 import com.strangequark.odoc.page.PageRepository;
 import com.strangequark.odoc.page.PageVersionRepository;
+import com.strangequark.odoc.space.SpaceRepository;
+import com.strangequark.odoc.storage.ObjectStorage;
+import com.strangequark.odoc.encryption.EncryptedRecord;
+import com.strangequark.odoc.encryption.ManagedRecordEncryption;
 import com.strangequark.odoc.workspace.WorkspaceAccessService;
+import com.strangequark.odoc.workspace.WorkspaceRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -43,15 +48,20 @@ class MediaAssetServiceTest {
     @Mock private WorkspaceAccessService workspaceAccess;
     @Mock private PageRepository pages;
     @Mock private PageVersionRepository versions;
+    @Mock private SpaceRepository spaces;
+    @Mock private WorkspaceRepository workspaces;
+    @Mock private ObjectStorage objectStorage;
+    @Mock private ManagedRecordEncryption encryption;
 
     @Test
-    void storesAnAllowedImageAndReturnsItsAuthenticatedApiPath() {
+    void storesAnAllowedImageAndReturnsItsAuthenticatedApiPath() throws Exception {
         UUID spaceId = UUID.randomUUID();
-        MediaAssetService service = new MediaAssetService(assets, workspaceAccess, pages, versions,
+        MediaAssetService service = new MediaAssetService(assets, workspaceAccess, pages, versions, spaces, workspaces, objectStorage, encryption,
                 Clock.fixed(Instant.parse("2026-08-14T00:00:00Z"), ZoneOffset.UTC));
         MockMultipartFile file = new MockMultipartFile("file", "architecture.png", "image/png",
                 new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, 1, 2, 3});
         when(assets.save(any(MediaAsset.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        encryptionSetup(spaceId);
 
         MediaAssetResponse response = service.upload(spaceId, file);
 
@@ -59,16 +69,22 @@ class MediaAssetServiceTest {
         assertThat(response.contentType()).isEqualTo("image/png");
         assertThat(response.sizeBytes()).isEqualTo(7);
         assertThat(response.url()).isEqualTo("/api/v1/media/" + response.id());
+        ArgumentCaptor<String> objectKey = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<byte[]> payload = ArgumentCaptor.forClass(byte[].class);
+        verify(objectStorage).put(objectKey.capture(), payload.capture(), eq("application/octet-stream"));
+        assertThat(objectKey.getValue()).contains("/media/" + response.id()).doesNotContain("architecture.png");
+        assertThat(java.util.Arrays.equals(payload.getValue(), file.getBytes())).isFalse();
     }
 
     @Test
     void storesAnAllowedVideoWhenTheFileSignatureMatches() {
         UUID spaceId = UUID.randomUUID();
-        MediaAssetService service = new MediaAssetService(assets, workspaceAccess, pages, versions,
+        MediaAssetService service = new MediaAssetService(assets, workspaceAccess, pages, versions, spaces, workspaces, objectStorage, encryption,
                 Clock.fixed(Instant.parse("2026-08-14T00:00:00Z"), ZoneOffset.UTC));
         MockMultipartFile file = new MockMultipartFile("file", "walkthrough.webm", "video/webm",
                 WEBM_EBML_HEADER);
         when(assets.save(any(MediaAsset.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        encryptionSetup(spaceId);
 
         MediaAssetResponse response = service.upload(spaceId, file);
 
@@ -137,29 +153,75 @@ class MediaAssetServiceTest {
         Instant cutoff = Instant.parse("2026-08-21T00:00:00Z");
         UUID unusedId = UUID.randomUUID();
         UUID referencedId = UUID.randomUUID();
-        when(assets.findIdsByCreatedAtBefore(eq(cutoff), any(Pageable.class)))
-                .thenReturn(List.of(unusedId, referencedId));
+        when(assets.findStorageReferencesByCreatedAtBefore(eq(cutoff), any(Pageable.class)))
+                .thenReturn(List.of(reference(unusedId), reference(referencedId)));
         when(pages.existsByContentContaining("/api/v1/media/" + unusedId)).thenReturn(false);
         when(versions.existsByContentContaining("/api/v1/media/" + unusedId)).thenReturn(false);
         when(assets.deleteDirectlyById(unusedId)).thenReturn(1);
-        when(pages.existsByContentContaining("/api/v1/media/" + referencedId)).thenReturn(true);
-
         assertThat(service().deleteUnreferencedOlderThan(cutoff)).isEqualTo(1);
 
         ArgumentCaptor<Pageable> page = ArgumentCaptor.forClass(Pageable.class);
-        verify(assets).findIdsByCreatedAtBefore(eq(cutoff), page.capture());
+        verify(assets).findStorageReferencesByCreatedAtBefore(eq(cutoff), page.capture());
         assertThat(page.getValue().getPageNumber()).isZero();
         assertThat(page.getValue().getPageSize()).isEqualTo(MediaAssetService.ORPHAN_CLEANUP_BATCH_SIZE);
         verify(assets, never()).findById(any());
     }
 
+    @Test
+    void decryptsAVerifiedExternalObjectOnlyAfterTheAuthorizedAssetLookup() {
+        UUID spaceId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        UUID workspaceScopeId = UUID.randomUUID();
+        UUID assetId = UUID.randomUUID();
+        byte[] bytes = new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, 1};
+        MediaAsset asset = new MediaAsset(assetId, spaceId, "diagram.png", "image/png",
+                "workspaces/" + workspaceScopeId + "/media/" + assetId + "/payload.odm",
+                sha256(bytes), bytes.length, Instant.EPOCH);
+        when(assets.findById(assetId)).thenReturn(java.util.Optional.of(asset));
+        when(spaces.findWorkspaceIdById(spaceId)).thenReturn(java.util.Optional.of(workspaceId));
+        when(workspaces.findSecurityScopeIdById(workspaceId)).thenReturn(java.util.Optional.of(workspaceScopeId));
+        when(objectStorage.get(asset.objectKey())).thenReturn(MediaEncryptedRecordCodec.encode(encryptedRecord()));
+        when(encryption.decrypt(any(), any())).thenReturn(bytes);
+
+        assertThat(service().download(assetId).content()).isEqualTo(bytes);
+
+        verify(workspaceAccess).requireSpaceAction(spaceId,
+                com.strangequark.odoc.authorization.AuthorizationAction.ATTACHMENT_VIEW);
+    }
+
     private MediaAssetService service() {
-        return new MediaAssetService(assets, workspaceAccess, pages, versions, Clock.systemUTC());
+        return new MediaAssetService(assets, workspaceAccess, pages, versions, spaces, workspaces, objectStorage, encryption, Clock.systemUTC());
     }
 
     private static MediaAsset asset(UUID id) {
         return new MediaAsset(id, UUID.randomUUID(), "media.png", "image/png",
                 new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47}, Instant.EPOCH);
+    }
+
+    private void encryptionSetup(UUID spaceId) {
+        UUID workspaceId = UUID.randomUUID();
+        when(spaces.findWorkspaceIdById(spaceId)).thenReturn(java.util.Optional.of(workspaceId));
+        when(workspaces.findSecurityScopeIdById(workspaceId)).thenReturn(java.util.Optional.of(UUID.randomUUID()));
+        when(encryption.encrypt(any(), any())).thenReturn(encryptedRecord());
+    }
+
+    private static EncryptedRecord encryptedRecord() {
+        return new EncryptedRecord(1, EncryptedRecord.ALGORITHM, 1, new byte[12], new byte[16]);
+    }
+
+    private static MediaAssetRepository.MediaAssetStorageReference reference(UUID id) {
+        return new MediaAssetRepository.MediaAssetStorageReference() {
+            @Override public UUID getId() { return id; }
+            @Override public String getObjectKey() { return null; }
+        };
+    }
+
+    private static String sha256(byte[] bytes) {
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 
 }

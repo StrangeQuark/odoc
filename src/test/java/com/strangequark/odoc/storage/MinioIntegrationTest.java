@@ -12,16 +12,11 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.core.sync.ResponseTransformer;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
 import software.amazon.awssdk.services.s3.model.DeleteBucketRequest;
-import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 /** Proves the local S3-compatible harness without depending on a developer-installed MinIO. */
 @Testcontainers(disabledWithoutDocker = true)
@@ -49,14 +44,14 @@ class MinioIntegrationTest {
             String bucket = "odoc-phase0-" + isolatedKey;
             String key = "contract/" + isolatedKey + ".txt";
             s3.createBucket(CreateBucketRequest.builder().bucket(bucket).build());
-            s3.putObject(PutObjectRequest.builder().bucket(bucket).key(key).build(),
-                    RequestBody.fromString("phase0 object round trip", StandardCharsets.UTF_8));
+            ObjectStorage storage = new S3ObjectStorage(s3, bucket);
+            storage.put(key, "phase0 object round trip".getBytes(StandardCharsets.UTF_8), "application/octet-stream");
 
-            String object = s3.getObject(GetObjectRequest.builder().bucket(bucket).key(key).build(),
-                    ResponseTransformer.toBytes()).asUtf8String();
+            String object = new String(storage.get(key), StandardCharsets.UTF_8);
 
             assertThat(object).isEqualTo("phase0 object round trip");
-            s3.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build());
+            assertThat(storage.list("contract/", 10)).extracting(ObjectStorage.StoredObject::key).containsExactly(key);
+            storage.delete(key);
             s3.deleteBucket(DeleteBucketRequest.builder().bucket(bucket).build());
         }
     }

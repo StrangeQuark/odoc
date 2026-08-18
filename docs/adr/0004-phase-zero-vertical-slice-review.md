@@ -51,7 +51,7 @@ The approving reviewer must record their identity/date in `IMPLEMENTATION_STATUS
 confirm all of the following:
 
 1. Feature work starts with the `M0-GATE` dependency order, not from the test endpoint.
-2. Built-in invite-only accounts and secure cookie sessions are implemented in `P1-101`;
+2. Built-in email/password accounts, verified-email gating, and secure cookie sessions are implemented in `P1-101`;
    shared Basic authentication stays development-only.
 3. The endpoint remains excluded from the normal runtime/contract and can be deleted once
    its transport behavior is covered by real authenticated commands.

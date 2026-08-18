@@ -84,8 +84,10 @@ be amended together before implementation:
   search providers, additional API-documentation languages, broader attachment preview
   providers, and multi-region guidance remain explicitly deferred until a newly assigned
   implementation package exists and the later claim passes `P5-527`;
-- invite-only email/password accounts are the MVP identity boundary. OIDC/OAuth/SSO are
-  optional provider-linking features; SAML broker, SCIM, and directory lifecycle are
+- built-in email/password accounts with verified-email enrollment are the MVP identity
+  boundary. The approved local/private profile permits normal self-service registration;
+  OIDC/OAuth/SSO are optional provider-linking features, while an invite-only/allowlist
+  enrollment policy is a future explicit deployment choice. SAML broker, SCIM, and directory lifecycle are
   deferred to the M5 enterprise track through `P5-530`;
 - native portable restore, Markdown/HTML interchange, and the Confluence importer are
   public-beta capabilities delivered by `P5-506`–`P5-508` before the M4 candidate;
@@ -102,7 +104,7 @@ amended before `P0-001` is approved.
 | Capability family | Earliest commitment | Owning packages and required gate |
 |---|---|---|
 | Workspaces, members, groups, and roles | MVP | `P1-100`–`P1-106`, `P1-113` |
-| Authentication and sessions | MVP, invite-only email/password plus secure sessions | `P1-101`, `P1-102`, `P1-108`, `P1-113`; optional OIDC/OAuth linking is in the same identity model and MFA/passkeys remain `P5-531` hardening work |
+| Authentication and sessions | MVP, self-service local email/password with verified-email enrollment and secure sessions | `P1-101`, `P1-102`, `P1-108`, `P1-113`; optional OIDC/OAuth linking is in the same identity model, an invite-only/allowlist policy requires an explicit deployment decision, and MFA/passkeys remain `P5-531` hardening work |
 | Enterprise identity and directory provisioning | M5 enterprise track; explicitly deferred from M4 | `P5-530`; SAML/SCIM claims require its contract, migration, security, and QA evidence |
 | Central authorization and tenant isolation | MVP | `P1-104`, `P1-113`, `QA-003`, `QA-008` |
 | Audit and administrative visibility | MVP baseline; beta UI | `P1-107`, `P3-312`, `P5-520`, `QA-003` |

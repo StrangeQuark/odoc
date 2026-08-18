@@ -1,6 +1,7 @@
 package com.strangequark.odoc.space;
 
 import com.strangequark.odoc.workspace.WorkspaceAccessService;
+import com.strangequark.odoc.authorization.AuthorizationAction;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -39,6 +40,7 @@ class SpaceService {
     @Transactional
     SpaceResponse create(CreateSpaceRequest request) {
         UUID workspaceId = workspaceAccess.defaultWorkspaceForCurrentUser();
+        workspaceAccess.requireWorkspaceAction(workspaceId, AuthorizationAction.SPACE_CREATE);
         String key = request.key().trim().toUpperCase(Locale.ROOT);
         if (spaces.findByWorkspaceIdAndKey(workspaceId, key).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A space with that key already exists.");

@@ -13,6 +13,11 @@ if ! command -v openssl >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! command -v keytool >/dev/null 2>&1; then
+  echo "keytool is required to create the local Java trust store." >&2
+  exit 1
+fi
+
 if ! [[ "${validity_days}" =~ ^[1-9][0-9]*$ ]]; then
   echo "ODOC_LOCAL_PKI_VALIDITY_DAYS must be a positive integer." >&2
   exit 1
@@ -77,6 +82,11 @@ cp "${ca_cert}" "${state_dir}/minio/CAs/ca.crt"
 cp "${ca_cert}" "${state_dir}/postgres/ca.crt"
 cp "${ca_cert}" "${state_dir}/client/ca.crt"
 
+if [[ ! -s "${state_dir}/client/truststore.p12" ]]; then
+  keytool -importcert -noprompt -alias odoc-local-ca -file "${ca_cert}" \
+    -keystore "${state_dir}/client/truststore.p12" -storetype PKCS12 -storepass odoc-local-only
+fi
+
 cat >"${state_dir}/postgres/pg_hba.conf" <<'EOF'
 # Generated for Odoc local TLS development.  Plain TCP is rejected deliberately.
 local   all             all                                     trust
@@ -98,6 +108,7 @@ chmod 0755 "${state_dir}/client"
 # manager and a separate deployment-specific key delivery mechanism.
 chmod 0755 "${state_dir}/api" "${state_dir}/frontend"
 chmod 0644 "${state_dir}/api/api.p12" "${state_dir}/frontend/frontend.crt"
+chmod 0644 "${state_dir}/client/truststore.p12"
 # Bind mounts preserve host ownership. The unprivileged local Nginx image therefore needs a
 # readable copy of its *development-only* key; the ignored state directory must stay local.
 chmod 0644 "${state_dir}/frontend/frontend.key"

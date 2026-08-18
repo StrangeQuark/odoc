@@ -11,7 +11,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "workspace_memberships")
-class WorkspaceMembership {
+public class WorkspaceMembership {
     @Id
     private UUID id;
 
@@ -25,6 +25,10 @@ class WorkspaceMembership {
     @Column(nullable = false, length = 24)
     private WorkspaceRole role;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 24)
+    private WorkspaceMembershipStatus status;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -35,12 +39,18 @@ class WorkspaceMembership {
         this.workspaceId = workspaceId;
         this.userId = userId;
         this.role = role;
+        this.status = WorkspaceMembershipStatus.ACTIVE;
         this.createdAt = createdAt;
     }
 
-    UUID id() { return id; }
-    UUID workspaceId() { return workspaceId; }
-    UUID userId() { return userId; }
-    WorkspaceRole role() { return role; }
-    Instant createdAt() { return createdAt; }
+    public UUID id() { return id; }
+    public UUID workspaceId() { return workspaceId; }
+    public UUID userId() { return userId; }
+    public WorkspaceRole role() { return role; }
+    WorkspaceMembershipStatus status() { return status; }
+    public boolean active() { return status == WorkspaceMembershipStatus.ACTIVE; }
+    public Instant createdAt() { return createdAt; }
+    void changeRole(WorkspaceRole role) { this.role = role; }
+    void suspend() { this.status = WorkspaceMembershipStatus.SUSPENDED; }
+    void restore() { this.status = WorkspaceMembershipStatus.ACTIVE; }
 }

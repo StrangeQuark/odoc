@@ -68,8 +68,15 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: local,tls
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${ODOC_DATABASE_NAME:-odoc}?sslmode=verify-full&sslrootcert=/tls/ca.crt
+      ODOC_OBJECT_STORAGE_ENDPOINT: https://minio:9000
+      ODOC_OBJECT_STORAGE_REQUIRE_TLS: "true"
       ODOC_SERVER_TLS_KEY_STORE: /tls-server/api.p12
       ODOC_SERVER_TLS_KEY_STORE_PASSWORD: odoc-local-only
+      JAVA_TOOL_OPTIONS: >-
+        -XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0 -Djava.io.tmpdir=/tmp
+        -Djavax.net.ssl.trustStore=/tls/truststore.p12
+        -Djavax.net.ssl.trustStoreType=PKCS12
+        -Djavax.net.ssl.trustStorePassword=odoc-local-only
     volumes:
       - ./state/pki/client:/tls:ro
       - ./state/pki/api:/tls-server:ro

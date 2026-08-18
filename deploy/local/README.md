@@ -26,9 +26,37 @@ connections without ever committing a private key.
 The TLS frontend becomes <https://localhost:8443>. Mailpit's UI becomes
 <https://localhost:8025>; trust the generated CA only for this local environment.
 
+### Optional invite-only enrollment
+
+Account creation is open by default in the local/private MVP. To require a valid one-time
+workspace invitation code for every new account, add `ODOC_AUTH_INVITE_ONLY=true` to the
+environment used by Compose:
+
+```bash
+ODOC_AUTH_INVITE_ONLY=true docker compose \
+  --env-file deploy/local/.env \
+  -f deploy/local/compose.yml \
+  -f deploy/local/compose.app.yml \
+  -f deploy/local/compose.tls.yml up --build
+```
+
+This only changes enrollment. Existing members can sign in and recover their passwords;
+the owner creates the one-time workspace invitation from the application and the recipient
+uses its code while creating their account.
+
+On an empty database, create the first owner while this setting is off in a private setup,
+then restart Compose with it on. There is deliberately no public first-account bypass.
+
 The PostgreSQL TLS overlay rejects non-TLS TCP clients. API and worker use JDBC hostname and
-CA verification. The frontend verifies the API certificate before proxying requests, and MinIO
-bucket initialization also connects over HTTPS with the local CA.
+CA verification. The API's S3 client uses the generated Java trust store for MinIO hostname/CA
+verification, the frontend verifies the API certificate before proxying requests, and MinIO bucket
+initialization also connects over HTTPS with the local CA.
+
+New media is written by the API's internal S3-compatible client to the `ODOC_MEDIA_BUCKET`
+bucket. The browser never receives MinIO credentials or a presigned plaintext URL: it continues
+to use the authenticated `/api/v1/media/{id}` endpoint. Local HTTP is deliberately restricted
+to this development Compose profile; production object storage must set an HTTPS endpoint and
+enable `ODOC_OBJECT_STORAGE_REQUIRE_TLS=true`.
 
 To exercise both application images with an immutable root filesystem and only their declared
 temporary writable paths, add `-f deploy/local/compose.hardened.yml` to that command. The API

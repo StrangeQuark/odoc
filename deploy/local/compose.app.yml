@@ -9,11 +9,23 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${ODOC_DATABASE_PASSWORD:-odoc}
       ODOC_MAIL_HOST: mailpit
       ODOC_MAIL_PORT: 1025
+      ODOC_OBJECT_STORAGE_ENABLED: "true"
+      ODOC_OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      ODOC_OBJECT_STORAGE_REGION: us-east-1
+      ODOC_OBJECT_STORAGE_BUCKET: ${ODOC_MEDIA_BUCKET:-odoc-media}
+      ODOC_OBJECT_STORAGE_ACCESS_KEY: ${ODOC_MINIO_ROOT_USER:-odoc-minio}
+      ODOC_OBJECT_STORAGE_SECRET_KEY: ${ODOC_MINIO_ROOT_PASSWORD:-odoc-minio-local-only}
+      ODOC_OBJECT_STORAGE_PATH_STYLE: "true"
+      ODOC_OBJECT_STORAGE_REQUIRE_TLS: "false"
+      # Set ODOC_AUTH_INVITE_ONLY=true to require a workspace invitation code for account creation.
+      ODOC_AUTH_INVITE_ONLY: ${ODOC_AUTH_INVITE_ONLY:-false}
     depends_on:
       postgres:
         condition: service_healthy
       mailpit:
         condition: service_started
+      minio-init:
+        condition: service_completed_successfully
     ports:
       - "${ODOC_API_PORT:-8080}:8080"
 

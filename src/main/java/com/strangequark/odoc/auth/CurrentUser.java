@@ -1,5 +1,6 @@
 package com.strangequark.odoc.auth;
 
+import java.time.Instant;
 import java.util.UUID;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
@@ -21,5 +22,14 @@ public class CurrentUser {
 
     public UUID requireId() {
         return require().id();
+    }
+
+    /** Use before credential-sensitive actions; normal page reads need only {@link #require()}. */
+    public AuthenticatedUser requireFresh(Instant notBefore) {
+        AuthenticatedUser user = require();
+        if (user.authenticatedAt().isBefore(notBefore)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Re-enter your password to continue.");
+        }
+        return user;
     }
 }

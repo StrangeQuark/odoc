@@ -9,10 +9,32 @@ trademark, domain, or material commercial decisions.
 The documentation platform provides polished, searchable documentation and first-class
 GitHub repository, README, and static Java API documentation.
 
-The repository contains a local Spring Boot/PostgreSQL MVP. Its current shared
-development login is not production-ready; the next authentication milestone replaces
-it with invite-only email/password accounts and secure sessions, with optional OIDC/SSO
-providers later.
+The repository contains a local Spring Boot/PostgreSQL MVP with built-in email/password
+accounts, secure cookie sessions, email verification, recovery, and workspace invitations.
+OIDC/OAuth/SSO are optional future account-linking providers rather than a requirement for
+normal sign-in.
+
+## Local account enrollment
+
+Local Compose allows normal email/password account creation by default. To make a
+deployment invite-only, set the following before starting or recreating the API:
+
+```bash
+ODOC_AUTH_INVITE_ONLY=true docker compose \
+  -f deploy/local/compose.yml \
+  -f deploy/local/compose.app.yml up --build
+```
+
+In invite-only mode, existing users can still sign in, recover a password, and accept a
+workspace invitation. New users must enter the one-time workspace invitation code in the
+Create account form; consuming it creates the account and workspace membership atomically.
+For Helm, set `api.auth.inviteOnly: true`. This is a local/private MVP enrollment policy;
+production identity, mail delivery, and provider configuration need their own deployment review.
+
+For a brand-new database, first create the initial owner in a restricted/private environment
+with invite-only mode left off. Then restart with invite-only mode on and have that owner issue
+the remaining workspace invitations. Odoc intentionally does not expose an unauthenticated
+“first account wins” bootstrap endpoint, because that would defeat invite-only deployment.
 
 ## Project documentation
 

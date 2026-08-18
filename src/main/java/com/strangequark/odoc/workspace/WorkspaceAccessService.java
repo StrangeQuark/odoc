@@ -1,7 +1,8 @@
 package com.strangequark.odoc.workspace;
 
 import com.strangequark.odoc.auth.CurrentUser;
-import com.strangequark.odoc.space.SpaceRepository;
+import com.strangequark.odoc.authorization.AuthorizationAction;
+import com.strangequark.odoc.authorization.WorkspaceAuthorizationService;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -15,17 +16,17 @@ public class WorkspaceAccessService {
     private final CurrentUser currentUser;
     private final WorkspaceMembershipRepository memberships;
     private final WorkspaceProvisioningService provisioning;
-    private final SpaceRepository spaces;
+    private final WorkspaceAuthorizationService authorization;
 
     WorkspaceAccessService(
             CurrentUser currentUser,
             WorkspaceMembershipRepository memberships,
             WorkspaceProvisioningService provisioning,
-            SpaceRepository spaces) {
+            WorkspaceAuthorizationService authorization) {
         this.currentUser = currentUser;
         this.memberships = memberships;
         this.provisioning = provisioning;
-        this.spaces = spaces;
+        this.authorization = authorization;
     }
 
     @Transactional
@@ -44,6 +45,7 @@ public class WorkspaceAccessService {
     @Transactional(readOnly = true)
     public List<UUID> workspaceIdsForCurrentUser() {
         return memberships.findAllByUserIdOrderByCreatedAtAsc(currentUser.requireId()).stream()
+                .filter(WorkspaceMembership::active)
                 .map(WorkspaceMembership::workspaceId)
                 .toList();
     }
@@ -51,26 +53,32 @@ public class WorkspaceAccessService {
     @Transactional(readOnly = true)
     WorkspaceMembership requireCurrentMembership(UUID workspaceId) {
         return memberships.findByWorkspaceIdAndUserId(workspaceId, currentUser.requireId())
+                .filter(WorkspaceMembership::active)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Workspace not found."));
     }
 
     @Transactional(readOnly = true)
     void requireCurrentOwner(UUID workspaceId) {
-        if (requireCurrentMembership(workspaceId).role() != WorkspaceRole.OWNER) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only a workspace owner can manage members.");
-        }
+        authorization.requireWorkspaceAction(workspaceId, AuthorizationAction.WORKSPACE_MANAGE_MEMBERS);
     }
 
     @Transactional(readOnly = true)
     public void requireAccessibleSpace(UUID spaceId) {
-        if (!canAccessSpace(spaceId)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Space not found.");
-        }
+        authorization.requireSpaceAction(spaceId, AuthorizationAction.SPACE_VIEW);
     }
 
     @Transactional(readOnly = true)
     public boolean canAccessSpace(UUID spaceId) {
-        List<UUID> workspaceIds = workspaceIdsForCurrentUser();
-        return !workspaceIds.isEmpty() && spaces.existsByIdAndWorkspaceIdIn(spaceId, workspaceIds);
+        return authorization.canAccessSpace(spaceId);
+    }
+
+    /** Compatibility façade while feature services migrate to the central policy model. */
+    public void requireWorkspaceAction(UUID workspaceId, AuthorizationAction action) {
+        authorization.requireWorkspaceAction(workspaceId, action);
+    }
+
+    /** Compatibility façade while feature services migrate to the central policy model. */
+    public void requireSpaceAction(UUID spaceId, AuthorizationAction action) {
+        authorization.requireSpaceAction(spaceId, action);
     }
 }

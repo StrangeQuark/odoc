@@ -15,11 +15,17 @@ class ArchitectureTest {
     static final ArchRule controllersStayAtTheHttpBoundary = classes()
             .that().haveSimpleNameEndingWith("Controller")
             .should().resideInAnyPackage(
-                    "..auth..", "..page..", "..space..", "..workspace..", "..media..", "..github..", "..commentary..", "..system..")
+                    "..auth..", "..page..", "..space..", "..workspace..", "..media..", "..github..", "..commentary..", "..system..", "..audit..")
             .because("HTTP adapters belong to their owning module, not the shared configuration layer");
 
     @ArchTest
     static final ArchRule configurationDoesNotDependOnFeatureModules = noClasses()
             .that().resideInAPackage("..config..")
             .should().dependOnClassesThat().resideInAnyPackage("..page..", "..space..", "..media..", "..github..", "..commentary..");
+
+    @ArchTest
+    static final ArchRule controllersDoNotReachProtectedRepositories = noClasses()
+            .that().haveSimpleNameEndingWith("Controller")
+            .should().dependOnClassesThat().haveSimpleNameEndingWith("Repository")
+            .because("authorization and feature services must run before protected persistence is accessed");
 }

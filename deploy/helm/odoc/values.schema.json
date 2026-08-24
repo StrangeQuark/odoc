@@ -1,35 +1,35 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Odoc Helm values",
+  "title": "Odoc lightweight Helm values",
   "type": "object",
   "additionalProperties": false,
-  "required": ["api", "worker", "frontend", "ingress"],
+  "required": ["api", "frontend", "ingress"],
   "properties": {
     "api": {
-      "allOf": [
-        { "$ref": "#/$defs/application" },
-        { "required": ["auth"] }
-      ]
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["springProfilesActive", "auth", "image", "replicaCount", "resources", "autoscaling", "database", "objectStorage", "encryption"],
+      "properties": {
+        "springProfilesActive": { "type": "string", "minLength": 1 },
+        "auth": { "type": "object", "additionalProperties": false, "required": ["inviteOnly"], "properties": { "inviteOnly": { "type": "boolean" } } },
+        "image": { "$ref": "#/$defs/image" },
+        "replicaCount": { "type": "integer", "minimum": 1 },
+        "resources": { "$ref": "#/$defs/resources" },
+        "autoscaling": { "$ref": "#/$defs/autoscaling" },
+        "database": { "$ref": "#/$defs/database" },
+        "objectStorage": { "$ref": "#/$defs/objectStorage" },
+        "encryption": { "$ref": "#/$defs/encryption" }
+      }
     },
-    "worker": { "$ref": "#/$defs/application" },
     "frontend": {
       "type": "object",
       "additionalProperties": false,
       "required": ["runtime", "image", "replicaCount", "resources"],
       "properties": {
-        "runtime": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["apiBasePath", "release"],
-          "properties": {
-            "apiBasePath": { "type": "string", "pattern": "^/" },
-            "release": { "type": "string", "minLength": 1 }
-          }
-        },
+        "runtime": { "type": "object", "additionalProperties": false, "required": ["apiBasePath", "release"], "properties": { "apiBasePath": { "type": "string", "pattern": "^/" }, "release": { "type": "string", "minLength": 1 } } },
         "image": { "$ref": "#/$defs/image" },
         "replicaCount": { "type": "integer", "minimum": 1 },
-        "resources": { "$ref": "#/$defs/resources" },
-        "upstreamTls": { "$ref": "#/$defs/trustBundle" }
+        "resources": { "$ref": "#/$defs/resources" }
       }
     },
     "ingress": {
@@ -45,161 +45,12 @@
       }
     }
   },
-  "allOf": [
-    {
-      "if": {
-        "properties": {
-          "api": {
-            "properties": {
-              "serverTls": {
-                "properties": { "enabled": { "const": true } }
-              }
-            }
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "frontend": {
-            "properties": {
-              "upstreamTls": {
-                "properties": { "enabled": { "const": true } }
-              }
-            }
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "frontend": {
-            "properties": {
-              "upstreamTls": {
-                "properties": { "enabled": { "const": true } }
-              }
-            }
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "api": {
-            "properties": {
-              "serverTls": {
-                "properties": { "enabled": { "const": true } }
-              }
-            }
-          }
-        }
-      }
-    }
-  ],
   "$defs": {
-    "application": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["springProfilesActive", "image", "replicaCount", "resources", "database"],
-      "properties": {
-        "springProfilesActive": { "type": "string", "minLength": 1 },
-        "auth": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["inviteOnly"],
-          "properties": { "inviteOnly": { "type": "boolean" } }
-        },
-        "image": { "$ref": "#/$defs/image" },
-        "replicaCount": { "type": "integer", "minimum": 1 },
-        "resources": { "$ref": "#/$defs/resources" },
-        "database": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["url", "existingSecret", "usernameKey", "passwordKey"],
-          "properties": {
-            "url": { "type": "string", "pattern": "^jdbc:postgresql://" },
-            "existingSecret": { "type": "string", "minLength": 1 },
-            "usernameKey": { "type": "string", "minLength": 1 },
-            "passwordKey": { "type": "string", "minLength": 1 }
-          }
-        },
-        "serverTls": { "$ref": "#/$defs/serverTls" },
-        "trustBundleConfigMap": { "type": "string" },
-        "trustBundleKey": { "type": "string", "minLength": 1 },
-        "autoscaling": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["enabled", "minReplicas", "maxReplicas", "targetCpuUtilizationPercentage"],
-          "properties": {
-            "enabled": { "type": "boolean" },
-            "minReplicas": { "type": "integer", "minimum": 1 },
-            "maxReplicas": { "type": "integer", "minimum": 1 },
-            "targetCpuUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 }
-          }
-        }
-      }
-    },
-    "image": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["repository", "tag", "pullPolicy"],
-      "properties": {
-        "repository": { "type": "string", "minLength": 1 },
-        "tag": { "type": "string", "minLength": 1 },
-        "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
-      }
-    },
-    "resources": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["requests", "limits"],
-      "properties": {
-        "requests": { "type": "object", "additionalProperties": { "type": ["string", "number"] } },
-        "limits": { "type": "object", "additionalProperties": { "type": ["string", "number"] } }
-      }
-    },
-    "trustBundle": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["enabled", "trustBundleConfigMap", "trustBundleKey"],
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "trustBundleConfigMap": { "type": "string" },
-        "trustBundleKey": { "type": "string", "minLength": 1 }
-      },
-      "allOf": [
-        {
-          "if": { "properties": { "enabled": { "const": true } } },
-          "then": {
-            "properties": {
-              "trustBundleConfigMap": { "type": "string", "minLength": 1 }
-            }
-          }
-        }
-      ]
-    },
-    "serverTls": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["enabled", "existingSecret", "keyStoreKey", "keyStorePasswordKey", "trustBundleConfigMap", "trustBundleKey"],
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "existingSecret": { "type": "string" },
-        "keyStoreKey": { "type": "string", "minLength": 1 },
-        "keyStorePasswordKey": { "type": "string", "minLength": 1 },
-        "trustBundleConfigMap": { "type": "string" },
-        "trustBundleKey": { "type": "string", "minLength": 1 }
-      },
-      "allOf": [
-        {
-          "if": { "properties": { "enabled": { "const": true } } },
-          "then": {
-            "properties": {
-              "existingSecret": { "type": "string", "minLength": 1 },
-              "trustBundleConfigMap": { "type": "string", "minLength": 1 }
-            }
-          }
-        }
-      ]
-    }
+    "image": { "type": "object", "additionalProperties": false, "required": ["repository", "tag", "pullPolicy"], "properties": { "repository": { "type": "string", "minLength": 1 }, "tag": { "type": "string", "minLength": 1 }, "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] } } },
+    "resources": { "type": "object", "additionalProperties": false, "required": ["requests", "limits"], "properties": { "requests": { "type": "object", "additionalProperties": { "type": ["string", "number"] } }, "limits": { "type": "object", "additionalProperties": { "type": ["string", "number"] } } } },
+    "autoscaling": { "type": "object", "additionalProperties": false, "required": ["enabled", "minReplicas", "maxReplicas", "targetCpuUtilizationPercentage"], "properties": { "enabled": { "type": "boolean" }, "minReplicas": { "type": "integer", "minimum": 1 }, "maxReplicas": { "type": "integer", "minimum": 1 }, "targetCpuUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 } } },
+    "database": { "type": "object", "additionalProperties": false, "required": ["url", "existingSecret", "usernameKey", "passwordKey"], "properties": { "url": { "type": "string", "pattern": "^jdbc:postgresql://" }, "existingSecret": { "type": "string", "minLength": 1 }, "usernameKey": { "type": "string", "minLength": 1 }, "passwordKey": { "type": "string", "minLength": 1 } } },
+    "objectStorage": { "type": "object", "additionalProperties": false, "required": ["enabled", "endpoint", "region", "bucket", "pathStyle", "requireTls", "existingSecret", "accessKeyKey", "secretKeyKey"], "properties": { "enabled": { "type": "boolean" }, "endpoint": { "type": "string" }, "region": { "type": "string", "minLength": 1 }, "bucket": { "type": "string", "minLength": 1 }, "pathStyle": { "type": "boolean" }, "requireTls": { "type": "boolean" }, "existingSecret": { "type": "string" }, "accessKeyKey": { "type": "string", "minLength": 1 }, "secretKeyKey": { "type": "string", "minLength": 1 } } },
+    "encryption": { "type": "object", "additionalProperties": false, "required": ["enabled", "existingSecret", "wrappingKeyKey"], "properties": { "enabled": { "type": "boolean" }, "existingSecret": { "type": "string" }, "wrappingKeyKey": { "type": "string", "minLength": 1 } } }
   }
 }

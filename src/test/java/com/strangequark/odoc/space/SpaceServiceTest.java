@@ -2,6 +2,7 @@ package com.strangequark.odoc.space;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.strangequark.odoc.workspace.WorkspaceAccessService;
@@ -37,5 +38,25 @@ class SpaceServiceTest {
         assertThat(response.key()).isEqualTo("ENG");
         assertThat(response.name()).isEqualTo("Engineering");
         assertThat(response.createdAt()).isEqualTo(now);
+    }
+
+    @Test
+    void getsUpdatesAndDeletesASpaceThroughTheRepository() {
+        Instant now = Instant.parse("2026-08-14T00:00:00Z");
+        UUID spaceId = UUID.randomUUID();
+        UUID workspaceId = UUID.randomUUID();
+        Space space = new Space(spaceId, workspaceId, "ENG", "Engineering", "Old", Instant.EPOCH);
+        SpaceService service = new SpaceService(spaces, workspaceAccess, Clock.fixed(now, ZoneOffset.UTC));
+        when(spaces.findById(spaceId)).thenReturn(Optional.of(space));
+        when(spaces.saveAndFlush(space)).thenReturn(space);
+
+        assertThat(service.get(spaceId).name()).isEqualTo("Engineering");
+        SpaceResponse updated = service.update(spaceId, new UpdateSpaceRequest(" Platform ", " Current docs "));
+        service.delete(spaceId);
+
+        assertThat(updated.name()).isEqualTo("Platform");
+        assertThat(updated.description()).isEqualTo("Current docs");
+        assertThat(updated.updatedAt()).isEqualTo(now);
+        verify(spaces).delete(space);
     }
 }

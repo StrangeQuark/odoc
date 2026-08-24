@@ -51,6 +51,36 @@ class PersistentDataEncryptionKeyProvider implements DataEncryptionKeyProvider {
         return unwrap(row);
     }
 
+    @Override
+    @Transactional
+    public DataEncryptionKey rotate(SecurityScope scope, EncryptionPurpose purpose) {
+        jdbcTemplate.query("SELECT pg_advisory_xact_lock(hashtext(?))", result -> null, lockName(scope, purpose));
+        ManagedDataKey current = repository
+                .findByScopeKindAndScopeIdAndPurposeAndStatus(scope.kind(), scope.id(), purpose, ACTIVE)
+                .orElseThrow(() -> new ManagedEncryptionException("No active encryption key exists.", null));
+        int nextVersion = repository.findByScopeKindAndScopeIdAndPurposeOrderByKeyVersionDesc(
+                scope.kind(), scope.id(), purpose).stream().mapToInt(ManagedDataKey::keyVersion).max().orElse(0) + 1;
+        current.retire();
+        byte[] rawDek = new byte[32];
+        secureRandom.nextBytes(rawDek);
+        SecretKey dek = new SecretKeySpec(rawDek, "AES");
+        ManagedDataKey created = repository.saveAndFlush(new ManagedDataKey(scope, purpose, nextVersion,
+                wrappingProvider.wrappingKeyVersion(), wrappingProvider.wrap(dek), Instant.now()));
+        return new DataEncryptionKey(created.keyVersion(), dek);
+    }
+
+    @Override
+    @Transactional
+    public void disable(SecurityScope scope, EncryptionPurpose purpose, int version) {
+        ManagedDataKey row = repository.findByScopeKindAndScopeIdAndPurposeAndKeyVersion(
+                scope.kind(), scope.id(), purpose, version)
+                .orElseThrow(() -> new ManagedEncryptionException("Encryption key does not exist.", null));
+        if (row.isActive()) {
+            throw new ManagedEncryptionException("An active key cannot be disabled before rotation.", null);
+        }
+        row.disable();
+    }
+
     private DataEncryptionKey create(SecurityScope scope, EncryptionPurpose purpose) {
         byte[] rawDek = new byte[32];
         secureRandom.nextBytes(rawDek);

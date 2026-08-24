@@ -62,11 +62,6 @@ spec:
               mountPath: /var/cache/nginx
             - name: nginx-run
               mountPath: /var/run
-            {{- if .Values.frontend.upstreamTls.enabled }}
-            - name: upstream-trust-bundle
-              mountPath: /etc/nginx/ca
-              readOnly: true
-            {{- end }}
           resources: {{- toYaml .Values.frontend.resources | nindent 12 }}
           readinessProbe: { httpGet: { path: /healthz, port: http }, initialDelaySeconds: 2, periodSeconds: 5 }
           livenessProbe: { httpGet: { path: /healthz, port: http }, initialDelaySeconds: 10, periodSeconds: 10 }
@@ -80,8 +75,3 @@ spec:
           emptyDir: { medium: Memory }
         - name: nginx-run
           emptyDir: { medium: Memory }
-        {{- if .Values.frontend.upstreamTls.enabled }}
-        - name: upstream-trust-bundle
-          configMap:
-            name: {{ .Values.frontend.upstreamTls.trustBundleConfigMap }}
-        {{- end }}

@@ -84,8 +84,14 @@ odoc:
     reject-forwarded-headers: ${ODOC_SECURITY_REJECT_FORWARDED_HEADERS:true}
   github:
     api-base-url: ${ODOC_GITHUB_API_BASE_URL:https://api.github.com/repos}
+    connect-timeout: ${ODOC_GITHUB_CONNECT_TIMEOUT:5s}
+    read-timeout: ${ODOC_GITHUB_READ_TIMEOUT:10s}
 
 management:
+  server:
+    # Kept private; Docker/Kubernetes probes may call this endpoint directly.
+    port: ${ODOC_MANAGEMENT_PORT:8081}
+    address: ${ODOC_MANAGEMENT_ADDRESS:127.0.0.1}
   endpoint:
     health:
       probes:

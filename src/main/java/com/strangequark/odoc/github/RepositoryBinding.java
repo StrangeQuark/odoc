@@ -60,4 +60,16 @@ class RepositoryBinding {
     String readmeContent() { return readmeContent; }
     String readmePath() { return readmePath; }
     Instant syncedAt() { return syncedAt; }
+
+    void refresh(GithubFetchedRepository fetched, Instant now) {
+        this.githubUrl = fetched.canonicalUrl();
+        this.owner = fetched.owner();
+        this.repositoryName = fetched.name();
+        this.description = fetched.description();
+        this.defaultBranch = fetched.defaultBranch();
+        this.stars = fetched.stars();
+        this.readmeContent = fetched.readmeContent();
+        this.readmePath = fetched.readmePath();
+        this.syncedAt = now;
+    }
 }

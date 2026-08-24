@@ -1,0 +1,13 @@
+# Production must provide a private management address and a trust chain. The
+# main public listener does not serve actuator endpoints at all.
+management:
+  server:
+    ssl:
+      enabled: true
+      key-store: ${ODOC_MANAGEMENT_TLS_KEYSTORE}
+      key-store-password: ${ODOC_MANAGEMENT_TLS_KEYSTORE_PASSWORD}
+      key-store-type: ${ODOC_MANAGEMENT_TLS_KEYSTORE_TYPE:PKCS12}
+      client-auth: need
+      trust-store: ${ODOC_MANAGEMENT_TLS_TRUSTSTORE}
+      trust-store-password: ${ODOC_MANAGEMENT_TLS_TRUSTSTORE_PASSWORD}
+      trust-store-type: ${ODOC_MANAGEMENT_TLS_TRUSTSTORE_TYPE:PKCS12}

@@ -17,6 +17,11 @@ services:
       ODOC_OBJECT_STORAGE_SECRET_KEY: ${ODOC_MINIO_ROOT_PASSWORD:-odoc-minio-local-only}
       ODOC_OBJECT_STORAGE_PATH_STYLE: "true"
       ODOC_OBJECT_STORAGE_REQUIRE_TLS: "false"
+      # The frontend proxies /api to this container. Browser requests retain
+      # the public frontend origin, so local Compose explicitly permits both
+      # documented loopback addresses. Other deployments must opt in with
+      # their own public origin(s).
+      ODOC_SECURITY_ALLOWED_ORIGINS: http://localhost:${ODOC_FRONTEND_PORT:-8081},http://127.0.0.1:${ODOC_FRONTEND_PORT:-8081}
       # Set ODOC_AUTH_INVITE_ONLY=true to require a workspace invitation code for account creation.
       ODOC_AUTH_INVITE_ONLY: ${ODOC_AUTH_INVITE_ONLY:-false}
     depends_on:
@@ -40,15 +45,3 @@ services:
       ODOC_RELEASE: local
     ports:
       - "${ODOC_FRONTEND_PORT:-8081}:8080"
-
-  worker:
-    build:
-      context: ../..
-    environment:
-      SPRING_PROFILES_ACTIVE: worker
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${ODOC_DATABASE_NAME:-odoc}
-      SPRING_DATASOURCE_USERNAME: ${ODOC_DATABASE_USERNAME:-odoc}
-      SPRING_DATASOURCE_PASSWORD: ${ODOC_DATABASE_PASSWORD:-odoc}
-    depends_on:
-      postgres:
-        condition: service_healthy

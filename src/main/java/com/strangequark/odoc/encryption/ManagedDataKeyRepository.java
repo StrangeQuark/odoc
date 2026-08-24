@@ -10,4 +10,7 @@ interface ManagedDataKeyRepository extends JpaRepository<ManagedDataKey, UUID> {
 
     Optional<ManagedDataKey> findByScopeKindAndScopeIdAndPurposeAndStatus(
             SecurityScopeKind scopeKind, UUID scopeId, EncryptionPurpose purpose, String status);
+
+    java.util.List<ManagedDataKey> findByScopeKindAndScopeIdAndPurposeOrderByKeyVersionDesc(
+            SecurityScopeKind scopeKind, UUID scopeId, EncryptionPurpose purpose);
 }

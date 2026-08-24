@@ -56,4 +56,10 @@ class Space {
     String getDescription() { return description; }
     Instant getCreatedAt() { return createdAt; }
     Instant getUpdatedAt() { return updatedAt; }
+
+    void update(String name, String description, Instant now) {
+        this.name = name;
+        this.description = description;
+        this.updatedAt = now;
+    }
 }

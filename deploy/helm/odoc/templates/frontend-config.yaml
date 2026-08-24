@@ -24,16 +24,10 @@ data:
       }
 
       location /api/ {
-        proxy_pass {{ if .Values.frontend.upstreamTls.enabled }}https{{ else }}http{{ end }}://{{ include "odoc.name" . }}-api:8080;
+        proxy_pass http://{{ include "odoc.name" . }}-api:8080;
         proxy_request_buffering off;
         proxy_buffering off;
         proxy_max_temp_file_size 0;
-        {{- if .Values.frontend.upstreamTls.enabled }}
-        proxy_ssl_verify on;
-        proxy_ssl_trusted_certificate /etc/nginx/ca/{{ .Values.frontend.upstreamTls.trustBundleKey }};
-        proxy_ssl_server_name on;
-        proxy_ssl_name {{ include "odoc.name" . }}-api;
-        {{- end }}
         proxy_set_header Host $host;
         # The API rejects ambient proxy headers. An operator that needs a
         # trusted-proxy topology must configure it explicitly with P6.

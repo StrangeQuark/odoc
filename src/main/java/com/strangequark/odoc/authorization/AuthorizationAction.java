@@ -20,6 +20,7 @@ public enum AuthorizationAction {
     PAGE_VIEW,
     PAGE_EDIT,
     PAGE_COMMENT,
+    PAGE_COMMENT_MODERATE,
     PAGE_RESTRICT,
     PAGE_MOVE,
     PAGE_COPY,

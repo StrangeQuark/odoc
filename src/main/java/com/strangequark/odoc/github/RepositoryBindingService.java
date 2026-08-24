@@ -52,18 +52,46 @@ class RepositoryBindingService {
         return RepositoryBindingResponse.from(bindings.save(binding));
     }
 
+    @Transactional
+    RepositoryBindingResponse refresh(UUID spaceId, UUID repositoryId) {
+        requireSpace(spaceId, AuthorizationAction.REPOSITORY_CONNECT);
+        RepositoryBinding binding = bindings.findByIdAndSpaceId(repositoryId, spaceId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Repository not found."));
+        GithubCoordinates coordinates = GithubCoordinates.parse(binding.githubUrl());
+        binding.refresh(github.fetchPublicRepository(coordinates.owner(), coordinates.repository()), clock.instant());
+        return RepositoryBindingResponse.from(bindings.saveAndFlush(binding));
+    }
+
     private void requireSpace(UUID spaceId, AuthorizationAction action) {
         workspaceAccess.requireSpaceAction(spaceId, action);
     }
 
     private record GithubCoordinates(String owner, String repository) {
         static GithubCoordinates parse(String url) {
-            URI uri = URI.create(url.trim());
-            String[] parts = uri.getPath().replaceAll("^/+|/+$", "").split("/");
-            if (!"github.com".equalsIgnoreCase(uri.getHost()) || parts.length != 2) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Use a canonical public GitHub repository URL.");
+            try {
+                URI uri = URI.create(url.trim());
+                String[] parts = uri.getPath().replaceAll("^/+|/+$", "").split("/");
+                if (!"https".equalsIgnoreCase(uri.getScheme())
+                        || !"github.com".equalsIgnoreCase(uri.getHost())
+                        || uri.getPort() != -1
+                        || uri.getUserInfo() != null
+                        || uri.getQuery() != null
+                        || uri.getFragment() != null
+                        || parts.length != 2
+                        || !parts[0].matches("[A-Za-z0-9_.-]+")
+                        || !parts[1].matches("[A-Za-z0-9_.-]+")
+                        || parts[1].endsWith(".git")) {
+                    throw invalidUrl();
+                }
+                return new GithubCoordinates(parts[0], parts[1]);
+            } catch (IllegalArgumentException exception) {
+                throw invalidUrl();
             }
-            return new GithubCoordinates(parts[0], parts[1]);
+        }
+
+        private static ResponseStatusException invalidUrl() {
+            return new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Use an HTTPS public GitHub repository URL such as https://github.com/owner/repository.");
         }
     }
 }

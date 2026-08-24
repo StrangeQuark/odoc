@@ -16,8 +16,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/spaces/{spaceId}/repositories")
 class RepositoryBindingController {
     private final RepositoryBindingService bindings;
+    private final JavaDocService javaDocs;
 
-    RepositoryBindingController(RepositoryBindingService bindings) { this.bindings = bindings; }
+    RepositoryBindingController(RepositoryBindingService bindings, JavaDocService javaDocs) {
+        this.bindings = bindings;
+        this.javaDocs = javaDocs;
+    }
 
     @GetMapping
     List<RepositoryBindingResponse> list(@PathVariable UUID spaceId) { return bindings.list(spaceId); }
@@ -26,5 +30,22 @@ class RepositoryBindingController {
     @ResponseStatus(HttpStatus.CREATED)
     RepositoryBindingResponse attach(@PathVariable UUID spaceId, @Valid @RequestBody AttachGithubRepositoryRequest request) {
         return bindings.attach(spaceId, request);
+    }
+
+    @PostMapping("/{repositoryId}/refresh")
+    RepositoryBindingResponse refresh(@PathVariable UUID spaceId, @PathVariable UUID repositoryId) {
+        return bindings.refresh(spaceId, repositoryId);
+    }
+
+    @GetMapping("/{repositoryId}/javadocs")
+    List<JavaDocSnapshotResponse> javaDocs(@PathVariable UUID spaceId, @PathVariable UUID repositoryId) {
+        return javaDocs.list(spaceId, repositoryId);
+    }
+
+    @PostMapping("/{repositoryId}/javadocs")
+    JavaDocSnapshotResponse refreshJavaDocs(
+            @PathVariable UUID spaceId, @PathVariable UUID repositoryId,
+            @Valid @RequestBody RefreshJavaDocRequest request) {
+        return javaDocs.refresh(spaceId, repositoryId, request);
     }
 }

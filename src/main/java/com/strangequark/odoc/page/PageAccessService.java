@@ -21,8 +21,15 @@ public class PageAccessService {
 
     @Transactional(readOnly = true)
     public void requireAccessiblePage(UUID pageId) {
+        requirePageAction(pageId, AuthorizationAction.PAGE_VIEW);
+    }
+
+    /** Resolves a page and applies the requested action through its owning space. */
+    @Transactional(readOnly = true)
+    public UUID requirePageAction(UUID pageId, AuthorizationAction action) {
         Page page = pages.findById(pageId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Page not found."));
-        workspaces.requireSpaceAction(page.getSpaceId(), AuthorizationAction.PAGE_VIEW);
+        workspaces.requireSpaceAction(page.getSpaceId(), action);
+        return page.getSpaceId();
     }
 }

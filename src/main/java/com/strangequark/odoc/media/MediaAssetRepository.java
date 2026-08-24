@@ -28,8 +28,6 @@ interface MediaAssetRepository extends JpaRepository<MediaAsset, UUID> {
     @Query(value = "update media_assets set storage_state = 'DELETE_PENDING' where id = :id", nativeQuery = true)
     int markDeletionPending(@Param("id") UUID id);
 
-    boolean existsByObjectKey(String objectKey);
-
     interface MediaAssetStorageReference {
         UUID getId();
         String getObjectKey();

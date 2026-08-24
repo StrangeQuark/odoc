@@ -73,6 +73,12 @@ public class ManagedRecordEncryption {
             writeUuid(data, context.resourceId());
             writeString(data, context.purpose().name());
             data.writeInt(context.plaintextSchemaVersion());
+            // Older bounded envelopes have an empty subresource and retain their
+            // exact AAD encoding. Chunked objects opt in to a labelled suffix so
+            // that a valid chunk cannot be reordered or replayed as another one.
+            if (!context.subresource().isEmpty()) {
+                writeString(data, context.subresource());
+            }
             data.writeInt(keyVersion);
             data.flush();
             return output.toByteArray();

@@ -10,6 +10,7 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.slf4j.MDC;
 
 /** Adds a correlation identifier that callers can include with support reports. */
 @Component
@@ -27,6 +28,11 @@ class RequestIdFilter extends OncePerRequestFilter {
                 : UUID.randomUUID().toString();
         request.setAttribute(HEADER, requestId);
         response.setHeader(HEADER, requestId);
-        filterChain.doFilter(request, response);
+        MDC.put("requestId", requestId);
+        try {
+            filterChain.doFilter(request, response);
+        } finally {
+            MDC.remove("requestId");
+        }
     }
 }

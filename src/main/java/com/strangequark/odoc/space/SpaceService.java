@@ -37,6 +37,12 @@ class SpaceService {
         return spaces.findAllByWorkspaceIdInOrderByNameAsc(workspaceIds).stream().map(SpaceResponse::from).toList();
     }
 
+    @Transactional(readOnly = true)
+    SpaceResponse get(UUID spaceId) {
+        workspaceAccess.requireSpaceAction(spaceId, AuthorizationAction.SPACE_VIEW);
+        return SpaceResponse.from(requireSpace(spaceId));
+    }
+
     @Transactional
     SpaceResponse create(CreateSpaceRequest request) {
         UUID workspaceId = workspaceAccess.defaultWorkspaceForCurrentUser();
@@ -53,5 +59,25 @@ class SpaceService {
         } catch (DataIntegrityViolationException exception) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A space with that key already exists.", exception);
         }
+    }
+
+    @Transactional
+    SpaceResponse update(UUID spaceId, UpdateSpaceRequest request) {
+        workspaceAccess.requireSpaceAction(spaceId, AuthorizationAction.SPACE_EDIT_SETTINGS);
+        Space space = requireSpace(spaceId);
+        String description = request.description() == null ? "" : request.description().trim();
+        space.update(request.name().trim(), description, clock.instant());
+        return SpaceResponse.from(spaces.saveAndFlush(space));
+    }
+
+    @Transactional
+    void delete(UUID spaceId) {
+        workspaceAccess.requireSpaceAction(spaceId, AuthorizationAction.SPACE_DELETE);
+        spaces.delete(requireSpace(spaceId));
+    }
+
+    private Space requireSpace(UUID spaceId) {
+        return spaces.findById(spaceId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Space not found."));
     }
 }

@@ -7,3 +7,11 @@ server:
     key-store-password: ${ODOC_SERVER_TLS_KEY_STORE_PASSWORD}
     key-store-type: PKCS12
     key-alias: odoc-api
+management:
+  server:
+    ssl:
+      enabled: true
+      key-store: ${ODOC_SERVER_TLS_KEY_STORE}
+      key-store-password: ${ODOC_SERVER_TLS_KEY_STORE_PASSWORD}
+      key-store-type: PKCS12
+      key-alias: odoc-api

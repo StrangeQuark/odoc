@@ -1,99 +1,61 @@
-# Local Compose dependencies
+# Run Odoc locally with Docker Compose
 
-The default Compose stack is intentionally convenient for an isolated developer machine. The
-TLS overlay is the development path that exercises trusted PostgreSQL, MinIO, and Mailpit
-connections without ever committing a private key.
+Run this command from the parent directory containing `odoc` and `odoc-react`:
 
-## Start with local TLS
+```bash
+docker compose -f odoc/deploy/local/compose.yml -f odoc/deploy/local/compose.app.yml up --build
+```
 
-1. Copy `.env.example` to `.env` and replace the development-only passwords.
-2. Generate the ignored local CA and service certificates:
+Then open <http://localhost:8081>. The stack contains only what the local app needs:
 
-   ```bash
-   ./deploy/local/scripts/bootstrap-pki.sh
-   ```
+- `frontend`: the Odoc web app;
+- `api`: the Spring Boot application;
+- `postgres`: page, account, and workspace data;
+- `minio`: local media storage;
+- `mailpit`: local email preview at <http://localhost:8025>.
 
-3. Start the dependency and application stack:
+PostgreSQL and MinIO use named Docker volumes, so restarting or stopping the stack preserves Odoc data.
 
-   ```bash
-   docker compose \
-     --env-file deploy/local/.env \
-     -f deploy/local/compose.yml \
-     -f deploy/local/compose.app.yml \
-     -f deploy/local/compose.tls.yml up --build
-   ```
+## First use and invite-only mode
 
-The TLS frontend becomes <https://localhost:8443>. Mailpit's UI becomes
-<https://localhost:8025>; trust the generated CA only for this local environment.
+Create an email/password account at the Odoc web address. Registration is open by default.
 
-### Optional invite-only enrollment
-
-Account creation is open by default in the local/private MVP. To require a valid one-time
-workspace invitation code for every new account, add `ODOC_AUTH_INVITE_ONLY=true` to the
-environment used by Compose:
+To require a workspace invitation code for each new account, start it with:
 
 ```bash
 ODOC_AUTH_INVITE_ONLY=true docker compose \
-  --env-file deploy/local/.env \
-  -f deploy/local/compose.yml \
-  -f deploy/local/compose.app.yml \
-  -f deploy/local/compose.tls.yml up --build
+  -f odoc/deploy/local/compose.yml \
+  -f odoc/deploy/local/compose.app.yml up --build
 ```
 
-This only changes enrollment. Existing members can sign in and recover their passwords;
-the owner creates the one-time workspace invitation from the application and the recipient
-uses its code while creating their account.
+For a new install, create the first owner while this is off in a private environment; then turn it on and use that owner to make invitations.
 
-On an empty database, create the first owner while this setting is off in a private setup,
-then restart Compose with it on. There is deliberately no public first-account bypass.
+## Smoke checklist
 
-The PostgreSQL TLS overlay rejects non-TLS TCP clients. API and worker use JDBC hostname and
-CA verification. The API's S3 client uses the generated Java trust store for MinIO hostname/CA
-verification, the frontend verifies the API certificate before proxying requests, and MinIO bucket
-initialization also connects over HTTPS with the local CA.
+After the containers are up, verify the product in this order:
 
-New media is written by the API's internal S3-compatible client to the `ODOC_MEDIA_BUCKET`
-bucket. The browser never receives MinIO credentials or a presigned plaintext URL: it continues
-to use the authenticated `/api/v1/media/{id}` endpoint. Local HTTP is deliberately restricted
-to this development Compose profile; production object storage must set an HTTPS endpoint and
-enable `ODOC_OBJECT_STORAGE_REQUIRE_TLS=true`.
+1. Register and sign in.
+2. Create a workspace, a space, and a page.
+3. Edit the page in place, add a heading, list, link, and image, then save and refresh.
+4. Add a comment, open history, and restore a revision if desired.
+5. Search for text in the page from the header.
+6. Attach a public GitHub repository, refresh it, and read its README.
+7. In that repository card, enter one relative Java path such as `src/main/java/example/Guide.java` and load the JavaDoc view.
 
-To exercise both application images with an immutable root filesystem and only their declared
-temporary writable paths, add `-f deploy/local/compose.hardened.yml` to that command. The API
-and worker receive only `/tmp`; the frontend receives `/tmp`, Nginx cache, and Nginx runtime
-state as `tmpfs` mounts. The runtime configuration is intentionally written to `/tmp`, not the
-static asset layer.
+The JavaDoc feature reads only the selected public source file; it does not clone, build, or run repository code.
 
-For an isolated reproducible smoke of the PKI, TLS proxy, JDBC verification, and immutable
-application containers (without touching the ordinary `odoc-local` stack), run:
+## Stop or reset
+
+Stop containers and keep data:
 
 ```bash
-./deploy/local/scripts/verify-secure-stack.sh
+docker compose -f odoc/deploy/local/compose.yml -f odoc/deploy/local/compose.app.yml down
 ```
 
-Set `ODOC_SECURE_SMOKE_THIN_SLICE=true` for the Phase 0 test-only validation/idempotency
-endpoint. That profile is intentionally absent from normal Compose and production configuration.
-
-To verify the minimal Helm contract without touching an existing Kubernetes cluster, run:
+Reset all local Odoc data (destructive):
 
 ```bash
-./deploy/helm/odoc/scripts/kind-smoke.sh
+docker compose -f odoc/deploy/local/compose.yml -f odoc/deploy/local/compose.app.yml down --volumes
 ```
 
-It creates an isolated `kind` cluster named `odoc-kind-smoke`, builds and loads the local
-API/frontend images, installs disposable PostgreSQL plus the API, worker, and frontend,
-checks health/API/deep-link routing, and deletes that cluster in all exit paths. This is a
-chart-wiring smoke only: the Phase 0 in-cluster fixture intentionally does not claim the
-production TLS/mTLS proof required before a production deployment.
-
-## Reset local data
-
-This is destructive and only targets the named `odoc-local` Compose volumes:
-
-```bash
-docker compose -f deploy/local/compose.yml -f deploy/local/compose.app.yml down --volumes --remove-orphans
-rm -rf deploy/local/state/pki
-```
-
-Run `bootstrap-pki.sh` again before using the TLS overlay after a PKI reset. Never use this
-Compose configuration, its credentials, or its CA in a production deployment.
+The `compose.tls.yml` and hardening overlays are development experiments, not part of the supported lightweight MVP path.

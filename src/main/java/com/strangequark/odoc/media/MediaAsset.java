@@ -12,8 +12,10 @@ import java.util.UUID;
 class MediaAsset {
     @Id private UUID id;
     @Column(nullable = false) private UUID spaceId;
-    @Column(nullable = false) private String filename;
+    // V23 permits null only after the encrypted filename envelope is present.
+    @Column private String filename;
     @Column(nullable = false) private String contentType;
+    @Column(name = "filename_envelope") private String filenameEnvelope;
     @Column private byte[] content;
     @Column(name = "object_key", length = 512) private String objectKey;
     @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
@@ -35,11 +37,17 @@ class MediaAsset {
         this.createdAt = createdAt;
     }
 
-    MediaAsset(UUID id, UUID spaceId, String filename, String contentType, String objectKey,
+    MediaAsset(UUID id, UUID spaceId, String filenameEnvelope, String contentType, String objectKey,
             String contentSha256, long sizeBytes, Instant createdAt) {
         this.id = id;
         this.spaceId = spaceId;
-        this.filename = filename;
+        // The six-argument form is retained for pre-V23 fixtures. New writes
+        // always pass the canonical encrypted payload representation.
+        if (filenameEnvelope != null && filenameEnvelope.startsWith("1.AES-256-GCM.")) {
+            this.filenameEnvelope = filenameEnvelope;
+        } else {
+            this.filename = filenameEnvelope;
+        }
         this.contentType = contentType;
         this.objectKey = objectKey;
         this.storageState = MediaStorageState.AVAILABLE;
@@ -51,6 +59,7 @@ class MediaAsset {
     UUID id() { return id; }
     UUID spaceId() { return spaceId; }
     String filename() { return filename; }
+    String filenameEnvelope() { return filenameEnvelope; }
     String contentType() { return contentType; }
     byte[] content() { return content; }
     String objectKey() { return objectKey; }

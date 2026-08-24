@@ -8,4 +8,8 @@ record MediaAssetResponse(UUID id, UUID spaceId, String filename, String content
         return new MediaAssetResponse(asset.id(), asset.spaceId(), asset.filename(), asset.contentType(),
                 asset.sizeBytes(), asset.createdAt(), "/api/v1/media/" + asset.id());
     }
+    static MediaAssetResponse from(MediaAsset asset, String filename) {
+        return new MediaAssetResponse(asset.id(), asset.spaceId(), filename, asset.contentType(),
+                asset.sizeBytes(), asset.createdAt(), "/api/v1/media/" + asset.id());
+    }
 }

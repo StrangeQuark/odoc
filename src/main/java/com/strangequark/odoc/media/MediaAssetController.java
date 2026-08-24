@@ -35,9 +35,9 @@ class MediaAssetController {
         MediaAsset asset = content.asset();
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + asset.filename() + "\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + content.filename() + "\"")
                 .contentType(MediaType.parseMediaType(asset.contentType()))
-                .contentLength(asset.sizeBytes())
+                .contentLength(content.content().length)
                 .body(new ByteArrayResource(content.content()));
     }
 

@@ -1,71 +1,48 @@
-# Illustrative production values. Replace every hostname, image digest, and
-# referenced Secret/ConfigMap name with operator-owned resources. This file
-# contains no credentials and is not a deployable environment configuration.
+# Example only. Replace all names and image tags with operator-owned values.
+# Odoc expects externally managed PostgreSQL and S3-compatible storage here.
 api:
-  springProfilesActive: api
+  springProfilesActive: production
+  auth: { inviteOnly: true }
   image:
     repository: registry.example.invalid/odoc-api
-    tag: sha256-pinned-release
+    tag: release-tag
     pullPolicy: IfNotPresent
   replicaCount: 2
-  resources:
-    requests: { cpu: 250m, memory: 512Mi }
-    limits: { cpu: "1", memory: 1Gi }
   autoscaling:
     enabled: true
     minReplicas: 2
-    maxReplicas: 10
+    maxReplicas: 4
     targetCpuUtilizationPercentage: 70
   database:
-    url: jdbc:postgresql://postgres.example.invalid:5432/odoc?sslmode=verify-full&sslrootcert=/tls/ca.crt
+    url: jdbc:postgresql://postgres.example.invalid:5432/odoc
     existingSecret: odoc-database
     usernameKey: username
     passwordKey: password
-  serverTls:
+  objectStorage:
     enabled: true
-    existingSecret: odoc-api-tls
-    keyStoreKey: api.p12
-    keyStorePasswordKey: password
-    trustBundleConfigMap: odoc-platform-ca
-    trustBundleKey: ca.crt
-
-worker:
-  springProfilesActive: worker
-  image:
-    repository: registry.example.invalid/odoc-api
-    tag: sha256-pinned-release
-    pullPolicy: IfNotPresent
-  replicaCount: 1
-  resources:
-    requests: { cpu: 100m, memory: 384Mi }
-    limits: { cpu: 500m, memory: 768Mi }
-  database:
-    url: jdbc:postgresql://postgres.example.invalid:5432/odoc?sslmode=verify-full&sslrootcert=/tls/ca.crt
-    existingSecret: odoc-database
-    usernameKey: username
-    passwordKey: password
-  trustBundleConfigMap: odoc-platform-ca
-  trustBundleKey: ca.crt
+    endpoint: https://storage.example.invalid
+    region: us-east-1
+    bucket: odoc-media
+    pathStyle: false
+    requireTls: true
+    existingSecret: odoc-object-storage
+    accessKeyKey: access-key
+    secretKeyKey: secret-key
+  encryption:
+    enabled: true
+    existingSecret: odoc-encryption
+    wrappingKeyKey: wrapping-key-base64
 
 frontend:
-  runtime: { apiBasePath: /api/v1, release: sha256-pinned-release }
+  runtime: { apiBasePath: /api/v1, release: release-tag }
   image:
     repository: registry.example.invalid/odoc-frontend
-    tag: sha256-pinned-release
+    tag: release-tag
     pullPolicy: IfNotPresent
   replicaCount: 2
-  resources:
-    requests: { cpu: 50m, memory: 64Mi }
-    limits: { cpu: 250m, memory: 128Mi }
-  upstreamTls:
-    enabled: true
-    trustBundleConfigMap: odoc-platform-ca
-    trustBundleKey: ca.crt
 
 ingress:
   enabled: true
   className: nginx
   host: odoc.example.invalid
   tlsSecretName: odoc-edge-tls
-  annotations:
-    nginx.ingress.kubernetes.io/proxy-body-size: 26m

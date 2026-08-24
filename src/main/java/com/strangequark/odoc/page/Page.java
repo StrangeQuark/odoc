@@ -26,6 +26,15 @@ class Page {
     @Column(nullable = false)
     private String content;
 
+    @Column(name = "plain_text", nullable = false)
+    private String plainText;
+
+    @Column(name = "author_id")
+    private UUID authorId;
+
+    @Column(name = "archived_at")
+    private Instant archivedAt;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -40,11 +49,21 @@ class Page {
     }
 
     Page(UUID id, UUID spaceId, UUID parentId, String title, String content, Instant createdAt) {
+        this(id, spaceId, parentId, title, content, PageContentText.from(content), null, createdAt);
+    }
+
+    Page(UUID id, UUID spaceId, UUID parentId, String title, String content, String plainText, Instant createdAt) {
+        this(id, spaceId, parentId, title, content, plainText, null, createdAt);
+    }
+
+    Page(UUID id, UUID spaceId, UUID parentId, String title, String content, String plainText, UUID authorId, Instant createdAt) {
         this.id = id;
         this.spaceId = spaceId;
         this.parentId = parentId;
         this.title = title;
         this.content = content;
+        this.plainText = plainText;
+        this.authorId = authorId;
         this.createdAt = createdAt;
         this.updatedAt = createdAt;
     }
@@ -54,12 +73,28 @@ class Page {
     UUID getParentId() { return parentId; }
     String getTitle() { return title; }
     String getContent() { return content; }
+    String getPlainText() { return plainText; }
+    UUID getAuthorId() { return authorId; }
+    boolean isArchived() { return archivedAt != null; }
     Instant getCreatedAt() { return createdAt; }
     Instant getUpdatedAt() { return updatedAt; }
 
-    void update(String title, String content, Instant now) {
+    long getRevision() { return revision; }
+
+    void update(String title, String content, String plainText, Instant now) {
         this.title = title;
         this.content = content;
+        this.plainText = plainText;
+        this.updatedAt = now;
+    }
+
+    void moveTo(UUID parentId, Instant now) {
+        this.parentId = parentId;
+        this.updatedAt = now;
+    }
+
+    void archive(Instant now) {
+        this.archivedAt = now;
         this.updatedAt = now;
     }
 }

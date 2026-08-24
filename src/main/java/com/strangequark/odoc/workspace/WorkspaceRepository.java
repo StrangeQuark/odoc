@@ -14,4 +14,7 @@ public interface WorkspaceRepository extends JpaRepository<Workspace, UUID> {
 
     @Query("select workspace.securityScopeId from Workspace workspace where workspace.id = :workspaceId")
     Optional<UUID> findSecurityScopeIdById(UUID workspaceId);
+
+    @Query("select workspace.id from Workspace workspace where workspace.securityScopeId = :securityScopeId")
+    Optional<UUID> findIdBySecurityScopeId(UUID securityScopeId);
 }

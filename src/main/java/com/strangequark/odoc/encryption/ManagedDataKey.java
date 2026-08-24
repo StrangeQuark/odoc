@@ -69,4 +69,7 @@ class ManagedDataKey {
     int keyVersion() { return keyVersion; }
     int wrappingKeyVersion() { return wrappingKeyVersion; }
     byte[] wrappedDek() { return Arrays.copyOf(wrappedDek, wrappedDek.length); }
+    boolean isActive() { return "ACTIVE".equals(status); }
+    void retire() { if (isActive()) status = "RETIRED"; }
+    void disable() { status = "DISABLED"; }
 }

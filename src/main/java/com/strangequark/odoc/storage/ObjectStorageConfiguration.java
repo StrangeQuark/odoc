@@ -50,11 +50,12 @@ class ObjectStorageConfiguration {
         return value;
     }
 
-    private static final class DisabledObjectStorage implements ObjectStorage {
+    private static final class DisabledObjectStorage implements ObjectStorage, AutoCloseable {
         @Override public void put(String key, byte[] ciphertext, String contentType) { unavailable(); }
         @Override public byte[] get(String key) { unavailable(); return null; }
         @Override public void delete(String key) { unavailable(); }
         @Override public java.util.List<StoredObject> list(String prefix, int limit) { unavailable(); return java.util.List.of(); }
+        @Override public void close() { }
         private static void unavailable() { throw new ObjectStorageException("Object storage is not configured.", null); }
     }
 

@@ -32,16 +32,15 @@ spec:
         app.kubernetes.io/component: api
     spec:
       automountServiceAccountToken: false
-      securityContext:
-        seccompProfile: { type: RuntimeDefault }
       containers:
         - name: api
           image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
           imagePullPolicy: {{ .Values.api.image.pullPolicy }}
-          ports: [{ name: http, containerPort: 8080 }]
+          ports:
+            - { name: http, containerPort: 8080 }
           env:
             - name: SPRING_PROFILES_ACTIVE
-              value: {{ if .Values.api.serverTls.enabled }}{{ printf "%s,tls" .Values.api.springProfilesActive | quote }}{{ else }}{{ .Values.api.springProfilesActive | quote }}{{ end }}
+              value: {{ .Values.api.springProfilesActive | quote }}
             - name: ODOC_AUTH_INVITE_ONLY
               value: {{ .Values.api.auth.inviteOnly | quote }}
             - name: SPRING_DATASOURCE_URL
@@ -50,59 +49,43 @@ spec:
               valueFrom: { secretKeyRef: { name: {{ .Values.api.database.existingSecret }}, key: {{ .Values.api.database.usernameKey }} } }
             - name: SPRING_DATASOURCE_PASSWORD
               valueFrom: { secretKeyRef: { name: {{ .Values.api.database.existingSecret }}, key: {{ .Values.api.database.passwordKey }} } }
-            {{- if .Values.api.serverTls.enabled }}
-            - name: ODOC_SERVER_TLS_KEY_STORE
-              value: /tls-server/{{ .Values.api.serverTls.keyStoreKey }}
-            - name: ODOC_SERVER_TLS_KEY_STORE_PASSWORD
-              valueFrom: { secretKeyRef: { name: {{ .Values.api.serverTls.existingSecret }}, key: {{ .Values.api.serverTls.keyStorePasswordKey }} } }
+            - name: ODOC_OBJECT_STORAGE_ENABLED
+              value: {{ .Values.api.objectStorage.enabled | quote }}
+            {{- if .Values.api.objectStorage.enabled }}
+            - name: ODOC_OBJECT_STORAGE_ENDPOINT
+              value: {{ .Values.api.objectStorage.endpoint | quote }}
+            - name: ODOC_OBJECT_STORAGE_REGION
+              value: {{ .Values.api.objectStorage.region | quote }}
+            - name: ODOC_OBJECT_STORAGE_BUCKET
+              value: {{ .Values.api.objectStorage.bucket | quote }}
+            - name: ODOC_OBJECT_STORAGE_PATH_STYLE
+              value: {{ .Values.api.objectStorage.pathStyle | quote }}
+            - name: ODOC_OBJECT_STORAGE_REQUIRE_TLS
+              value: {{ .Values.api.objectStorage.requireTls | quote }}
+            - name: ODOC_OBJECT_STORAGE_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: {{ .Values.api.objectStorage.existingSecret }}, key: {{ .Values.api.objectStorage.accessKeyKey }} } }
+            - name: ODOC_OBJECT_STORAGE_SECRET_KEY
+              valueFrom: { secretKeyRef: { name: {{ .Values.api.objectStorage.existingSecret }}, key: {{ .Values.api.objectStorage.secretKeyKey }} } }
             {{- end }}
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities: { drop: ["ALL"] }
-            runAsNonRoot: true
-            runAsUser: 10001
-            runAsGroup: 10001
-          volumeMounts:
-            - name: tmp
-              mountPath: /tmp
-            {{- if .Values.api.serverTls.enabled }}
-            - name: server-tls
-              mountPath: /tls-server
-              readOnly: true
-            - name: trust-bundle
-              mountPath: /tls
-              readOnly: true
+            - name: ODOC_MANAGED_ENCRYPTION_ENABLED
+              value: {{ .Values.api.encryption.enabled | quote }}
+            {{- if .Values.api.encryption.enabled }}
+            - name: ODOC_MANAGED_ENCRYPTION_WRAPPING_KEY_BASE64
+              valueFrom: { secretKeyRef: { name: {{ .Values.api.encryption.existingSecret }}, key: {{ .Values.api.encryption.wrappingKeyKey }} } }
             {{- end }}
           resources: {{- toYaml .Values.api.resources | nindent 12 }}
-          {{- if .Values.api.serverTls.enabled }}
           startupProbe:
-            exec: { command: ["sh", "-ec", {{ printf "curl --fail --silent --cacert /tls/%s --resolve %s-api:8080:127.0.0.1 https://%s-api:8080/actuator/health >/dev/null" .Values.api.serverTls.trustBundleKey (include "odoc.name" .) (include "odoc.name" .) | quote }}] }
+            exec: { command: ["sh", "-ec", "curl --fail --silent http://127.0.0.1:8081/actuator/health/liveness >/dev/null"] }
             failureThreshold: 30
             periodSeconds: 2
           readinessProbe:
-            exec: { command: ["sh", "-ec", {{ printf "curl --fail --silent --cacert /tls/%s --resolve %s-api:8080:127.0.0.1 https://%s-api:8080/actuator/health >/dev/null" .Values.api.serverTls.trustBundleKey (include "odoc.name" .) (include "odoc.name" .) | quote }}] }
+            exec: { command: ["sh", "-ec", "curl --fail --silent http://127.0.0.1:8081/actuator/health/readiness >/dev/null"] }
+            initialDelaySeconds: 3
             periodSeconds: 5
           livenessProbe:
-            exec: { command: ["sh", "-ec", {{ printf "curl --fail --silent --cacert /tls/%s --resolve %s-api:8080:127.0.0.1 https://%s-api:8080/actuator/health >/dev/null" .Values.api.serverTls.trustBundleKey (include "odoc.name" .) (include "odoc.name" .) | quote }}] }
+            exec: { command: ["sh", "-ec", "curl --fail --silent http://127.0.0.1:8081/actuator/health/liveness >/dev/null"] }
             initialDelaySeconds: 15
             periodSeconds: 10
-          {{- else }}
-          startupProbe: { httpGet: { path: /actuator/health, port: http }, failureThreshold: 30, periodSeconds: 2 }
-          readinessProbe: { httpGet: { path: /actuator/health, port: http }, initialDelaySeconds: 3, periodSeconds: 5 }
-          livenessProbe: { httpGet: { path: /actuator/health, port: http }, initialDelaySeconds: 15, periodSeconds: 10 }
-          {{- end }}
-      volumes:
-        - name: tmp
-          emptyDir: { medium: Memory }
-        {{- if .Values.api.serverTls.enabled }}
-        - name: server-tls
-          secret:
-            secretName: {{ .Values.api.serverTls.existingSecret }}
-        - name: trust-bundle
-          configMap:
-            name: {{ .Values.api.serverTls.trustBundleConfigMap }}
-        {{- end }}
 ---
 {{- if .Values.api.autoscaling.enabled }}
 apiVersion: autoscaling/v2

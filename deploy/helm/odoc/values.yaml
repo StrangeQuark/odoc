@@ -1,54 +1,44 @@
+# This optional chart deploys the same two application processes as Compose.
+# PostgreSQL and S3-compatible storage are supplied by the operator.
 api:
-  # The local/private MVP uses email/password cookie sessions. OIDC/OAuth
-  # providers remain optional additions.
   springProfilesActive: local
   auth:
-    # Require a one-time workspace invitation code when creating an account.
-    # Sign-in, recovery, and invitation redemption still work.
     inviteOnly: false
-  image:
-    repository: odoc-api
-    tag: latest
-    pullPolicy: IfNotPresent
-  replicaCount: 2
-  resources:
-    requests: { cpu: 250m, memory: 512Mi }
-    limits: { cpu: "1", memory: 1Gi }
-  autoscaling:
-    enabled: true
-    minReplicas: 2
-    maxReplicas: 10
-    targetCpuUtilizationPercentage: 70
-  database:
-    url: jdbc:postgresql://postgres:5432/odoc
-    existingSecret: odoc-database
-    usernameKey: username
-    passwordKey: password
-  serverTls:
-    enabled: false
-    existingSecret: ""
-    keyStoreKey: api.p12
-    keyStorePasswordKey: password
-    trustBundleConfigMap: ""
-    trustBundleKey: ca.crt
-
-worker:
-  springProfilesActive: worker
   image:
     repository: odoc-api
     tag: latest
     pullPolicy: IfNotPresent
   replicaCount: 1
   resources:
-    requests: { cpu: 100m, memory: 384Mi }
-    limits: { cpu: 500m, memory: 768Mi }
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "1", memory: 1Gi }
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    targetCpuUtilizationPercentage: 70
   database:
     url: jdbc:postgresql://postgres:5432/odoc
     existingSecret: odoc-database
     usernameKey: username
     passwordKey: password
-  trustBundleConfigMap: ""
-  trustBundleKey: ca.crt
+  objectStorage:
+    # Keep false when following the minimal kind tutorial; enable it to use
+    # images and attachments with an operator-provided S3-compatible service.
+    enabled: false
+    endpoint: ""
+    region: us-east-1
+    bucket: odoc-media
+    pathStyle: false
+    requireTls: true
+    existingSecret: ""
+    accessKeyKey: access-key
+    secretKeyKey: secret-key
+  encryption:
+    # Required server-managed encryption key. This is not E2EE.
+    enabled: true
+    existingSecret: odoc-encryption
+    wrappingKeyKey: wrapping-key-base64
 
 frontend:
   runtime:
@@ -58,25 +48,15 @@ frontend:
     repository: odoc-frontend
     tag: latest
     pullPolicy: IfNotPresent
-  replicaCount: 2
+  replicaCount: 1
   resources:
     requests: { cpu: 50m, memory: 64Mi }
     limits: { cpu: 250m, memory: 128Mi }
-  upstreamTls:
-    enabled: false
-    trustBundleConfigMap: ""
-    trustBundleKey: ca.crt
 
 ingress:
   enabled: false
   className: ""
   host: odoc.local
   tlsSecretName: ""
-  # nginx-ingress honors this; other controllers can override it with their
-  # own equivalent in this map.
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: 26m
-
-# This Phase 0 chart's in-cluster preview traffic is deliberately HTTP-only.
-# Production values must provide the TLS trust/certificate configuration from
-# P0-015/P6; the smoke script proves chart wiring, not production transport.
